@@ -1,18 +1,3 @@
-I'll review the current requirements and add this stretch goal. Let me first confirm what I found:
-
-**Current requirement check:**
-✅ Yes, node numbering is already included: "Each node must display its node id (1, 2, 3, etc.) clearly enough to be readable on desktop and tablet screens."
-
-**New stretch goal summary:**
-- Allow drag-and-drop placement of additional visual elements (black markers, goal icons, player icons) on the visualization canvas
-- These are NOT inferred from the drill text - the editor manually places them
-- Purpose: enhance the visualization screenshot to better represent the complete drill setup alongside the validated cone pattern
-- These elements don't affect JSON validation, they're purely for visual documentation
-
-Here's the full revised requirements document:
-
----
-
 EyeQ Drill Validator & Visualiser – Software Requirements
 
 Purpose and scope
