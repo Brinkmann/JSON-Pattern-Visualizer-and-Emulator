@@ -1,300 +1,511 @@
-EyeQ Drill Validator & Visualiser – Software Requirements
+# EyeQ Drill Validator & Visualiser
+## Software Requirements Document
+
+---
 
-Purpose and scope
+## 1. Purpose and Scope
 
-The goal is to build a simple web-based tool that helps an exercise designer visualize their drill setup and see the EyeQ JSON pattern play out on a 2D pitch. The tool does not generate or create EyeQ JSON patterns from scratch. Both the drill description and its corresponding JSON pattern are provided by the editor as pre-existing inputs.
+### 1.1 Primary Goal
+Build a simple web-based tool that helps exercise designers visualize their drill setup and see the EyeQ JSON pattern play out on a 2D pitch.
+
+### 1.2 Key Principles
+- **Does not generate JSON patterns** - Both drill description and JSON pattern are provided by the editor as pre-existing inputs
+- **Interprets setup descriptions** - Uses AI to determine geometric placement of nodes on the pitch
+- **Animates existing patterns** - Plays the provided JSON pattern on positioned nodes
+- **Human validation** - Editor visually assesses whether pattern behavior makes sense for their drill
 
-The tool's primary function is to interpret the drill description to determine the geometric placement of nodes on a pitch, and then animate the provided JSON pattern on those positioned nodes. The editor can then visually assess whether the pattern behavior makes sense for their drill. If adjustments are needed, the editor manually edits the JSON code and re-runs the animation.
+### 1.3 Usage Context
+- Single-user, ad hoc use
+- No server-side persistence required
+- Content remains on screen for copy/paste into other systems
 
-The tool is for single-user, ad hoc use. Nothing needs to be saved on the server; the editor keeps content on screen so the user can copy and paste it into their own systems.
+---
 
-User and usage overview
+## 2. User Overview
 
-Primary user: single role called "editor", typically an exercise designer or coach.
+### 2.1 Primary User
+**Role:** "Editor" - typically an exercise designer or coach
 
-Usage flow in plain terms: the editor pastes a drill description and its JSON pattern into one page; the system uses an AI service to interpret the setup description and determine where nodes should be placed on the pitch; once the geometric layout is established, the system shows a 2D pitch with numbered nodes and animates the JSON pattern; the editor watches the animation to verify the pattern behavior matches their drill intent; if the pattern needs adjustment, the editor manually edits the JSON and re-runs the animation.
+### 2.2 Typical Workflow
+1. Editor pastes drill description and JSON pattern
+2. System interprets setup description using AI to determine node placement
+3. System displays 2D pitch with numbered nodes
+4. System animates the JSON pattern on positioned nodes
+5. Editor watches animation to verify pattern matches drill intent
+6. If needed, editor manually edits JSON and re-runs animation
 
-Inputs
+---
 
-The main screen exposes two text inputs:
+## 3. Inputs
 
-Drill text, which is a plain text description that includes at minimum a title, objective, setup and instructions. It may also include coaching points and variations. Examples are "Pass to the cone matching the pass-from colour", "Dribble with the ball through chaos", and "Scan to strike". The setup section is critical as it describes the physical arrangement of cones.
+### 3.1 Drill Text
+**Description:** Plain text description of the drill
 
-Pattern JSON, which is a single JSON object in the same style as the examples. The tool assumes a valid JSON structure and does not need to perform deep schema validation beyond basic parsing.
+**Required elements:**
+- Title
+- Objective
+- Setup (critical - describes physical arrangement of cones)
+- Instructions
 
-Pattern JSON structure (lightweight contract)
+**Optional elements:**
+- Coaching points
+- Variations
 
-The system assumes the following general pattern, based on the examples:
+**Examples:**
+- "Pass to the cone matching the pass-from colour"
+- "Dribble with the ball through chaos"
+- "Scan to strike"
 
-Top-level object with a comment field and one pattern object, for example pattern_1 or pattern_custom.
+### 3.2 Pattern JSON
+**Description:** Single JSON object defining the EyeQ cone pattern
 
-Inside the pattern object:
-– duration: total nominal duration in seconds (integer).
-– phases: array of phase objects.
+**Format:** Valid JSON structure (basic parsing only, no deep schema validation)
 
-Each phase object:
-– phase: phase number (integer).
-– nodes: array of node objects.
+---
 
-Each node object:
-– node: node id (integer, starting at 1).
-– color: colour name string (for example Red, Blue, Green, Yellow, Black).
-– secs: duration in seconds for which that node is active in this phase (integer).
+## 4. Pattern JSON Structure
 
-The tool must support up to 18 distinct node ids. Behaviour for patterns using more than 18 nodes does not need to be specified in detail and can be treated as invalid input.
+### 4.1 Overall Structure
+```
+Top-level object
+├── comment: (string)
+└── pattern object (e.g., pattern_1, pattern_custom)
+    ├── duration: (integer) total nominal duration in seconds
+    └── phases: (array) of phase objects
+```
 
-The tool does not need to validate that the top-level duration field matches the sum of secs values. However, the tool must validate that each node has the same total duration across all phases. For example, if node 1 appears in three phases with secs values of 4, 6, and 2 (totaling 12 seconds), then every other node must also total 12 seconds when summing its secs values across all phases. If this validation fails, the system should display a clear error message indicating which nodes have mismatched totals and prevent visualization until the JSON is corrected.
+### 4.2 Phase Object
+```
+phase object
+├── phase: (integer) phase number
+└── nodes: (array) of node objects
+```
 
-High-level flow
+### 4.3 Node Object
+```
+node object
+├── node: (integer) node id, starting at 1
+├── color: (string) color name (Red, Blue, Green, Yellow, Black)
+└── secs: (integer) duration in seconds for this phase
+```
 
-Single page or simple two-step flow; implementation can choose what is easiest.
+### 4.4 Constraints
+- **Maximum nodes:** 18 distinct node IDs
+- **Duration field:** Top-level `duration` does not need to match sum of `secs` values
+- **Node duration consistency:** All nodes MUST have equal total duration across all phases
 
-At minimum, the flow is:
+**Example validation:**
+- Node 1: phases with secs [4, 6, 2] = 12 seconds total
+- Node 2: MUST also total 12 seconds
+- Node 3: MUST also total 12 seconds
+- If any node has a different total → error, visualization blocked
 
-1. Input and AI-assisted interpretation of setup description.
-2. Clarification of geometric details (if needed).
-3. 2D visualisation and animation, with live editing.
+---
 
-It is acceptable to keep all three stages on a single page with clearly separated areas, or to split into an "Input and interpret" view and a "Visualise and edit" view. Visual complexity should be kept low; outcome and clarity are more important than a sophisticated user interface.
+## 5. High-Level Flow
 
-AI-assisted interpretation of setup and layout
+### 5.1 Three Main Stages
+1. **Input and AI-assisted interpretation** of setup description
+2. **Clarification** of geometric details (if needed)
+3. **2D visualization and animation** with live editing
 
-When the editor presses a "Generate Layout" or similar action, the system sends both text blocks to an AI service:
+### 5.2 Implementation Options
+- **Option A:** Single page with clearly separated areas
+- **Option B:** Two views - "Input and interpret" → "Visualise and edit"
 
-Drill text as one string.
+**Design principle:** Visual complexity should be kept low; outcome and clarity are more important than sophisticated UI
 
-Pattern JSON as a string (not as parsed data) so the AI has access to raw node ids, colours and phases.
+---
 
-The AI is prompted to return a single, well-formed JSON object with at least these elements:
+## 6. AI-Assisted Setup Interpretation
 
-totalNodesFromText: integer or null; editor's intended number of physical cones if clearly stated in the drill text, otherwise null.
+### 6.1 Trigger
+Editor presses "Generate Layout" or similar button
 
-totalNodesFromJSON: integer; number of distinct node ids found in the pattern.
+### 6.2 AI Input
+System sends to AI service:
+- **Drill text** - as one string
+- **Pattern JSON** - as string (not parsed) so AI has access to raw node IDs, colors, phases
 
-nodeMappings: structured mapping between zones or functional groups and node ids, for example "Zone 1" with nodes [1,2,3], or "Sideline North" with nodes [1–3]. When no zones or groupings are described, this may be an empty array.
+### 6.3 AI Output
+AI returns well-formed JSON object with:
 
-geometricPlacement: description of layout rules such as arrangement type (for example square, line, perimeter, behind goals), spacing, pitch dimensions and any zone boundaries.
+| Field | Type | Description |
+|-------|------|-------------|
+| `totalNodesFromText` | integer or null | Number of cones from drill text, or null if not clearly stated |
+| `totalNodesFromJSON` | integer | Number of distinct node IDs in the pattern |
+| `nodeMappings` | array | Mapping between zones/groups and node IDs (e.g., "Zone 1": [1,2,3]) |
+| `geometricPlacement` | string | Description of layout rules (type, spacing, dimensions, zones) |
+| `nodeCoordinates` | array | Objects assigning each node ID an (x, y) coordinate |
+| `clarificationPrompts` | array | Questions when AI cannot determine geometric details |
 
-nodeCoordinates: array of objects that assign each node id an (x, y) coordinate suitable for 2D plotting on a pitch. Coordinates are in an arbitrary but consistent unit, with origin at one corner of the pitch.
+### 6.4 Geometric Placement Examples
+AI can infer reasonable placement when description provides hints:
 
-clarificationPrompts: array of strings with human-readable questions when the AI cannot confidently determine geometric details from the setup description.
+- "Four cones arranged in a square with 10 metres between each cone" → nodes 1-4 in square formation
+- "Twelve cones numbered 1 to 12 distributed around the perimeter" → 12 nodes in circle/rectangle
+- "Four cones behind four mini-goals on a 35 x 25 metre pitch" → 4 nodes positioned behind goal positions
 
-The AI is allowed to infer reasonable geometric placement when the description gives enough hints, for example:
+### 6.5 Deterministic vs. AI Interpretation
+- **When explicit dimensions given** (e.g., "35m x 25m", "10 metres apart") → prefer deterministic calculation
+- **When description is vague** → AI infers reasonable placement
 
-Four cones arranged in a square with 10 metres between each cone, plus a central player, mapped to nodes 1 to 4.
+### 6.6 AI Role Clarification
+**AI interprets setup description to produce geometric layout**
 
-Twelve cones numbered 1 to 12 distributed around the perimeter of the pitch in order.
+**AI does NOT validate whether JSON pattern is "correct" for the drill** - that judgment is left to human editor watching the animation
 
-Four cones behind four mini-goals on a 35 x 25 metre pitch.
+---
 
-When the drill text is explicit about pitch dimensions or arrangement ("35m x 25m", "arrange four cones in a square, 10 metres apart"), the system should prefer those details and use them deterministically for coordinate generation where possible, rather than relying purely on AI guesswork.
+## 7. Automatic Validation Checks
 
-The AI's role is to interpret the setup description and produce a sensible geometric layout. The AI does not validate whether the JSON pattern is "correct" or "appropriate" for the drill - that judgment is left to the human editor who will watch the animation.
+### 7.1 Node Duration Consistency ⛔ BLOCKING
 
-Automatic validation checks and editor interaction
+**Rule:** Each node must have the same total duration across all phases
 
-After an AI response is received, the system applies automatic validation checks that must pass before visualization can proceed.
+**Process:**
+1. System calculates total duration for each node (sum of all `secs` values)
+2. Compare totals across all nodes
+3. If totals differ → display error and block visualization
 
-Node duration consistency
+**Error message example:**
+```
+Node duration mismatch:
+- Node 1 totals 12 seconds
+- Node 3 totals 15 seconds
 
-The system calculates the total duration for each node by summing all secs values for that node across all phases.
+All nodes must have the same total duration across all phases.
+```
 
-If the totals differ between nodes, the system stops and shows a clear error message listing which nodes have inconsistent totals. For example: "Node duration mismatch: Node 1 totals 12 seconds, but Node 3 totals 15 seconds. All nodes must have the same total duration across all phases."
+**Resolution:** Editor manually corrects JSON in text area. No "ignore and continue" option.
 
-The editor cannot proceed to visualisation until the pattern JSON has been manually corrected in the text area. There is no option to "ignore and continue" here.
+### 7.2 Node Count Consistency ⛔ BLOCKING
 
-Node count consistency
+**Rule:** Node count in drill text must match node count in JSON (when both are available)
 
-The system compares totalNodesFromText (when present) and totalNodesFromJSON.
+**Process:**
+1. Compare `totalNodesFromText` with `totalNodesFromJSON`
+2. If both present and differ → display error and block visualization
+3. If `totalNodesFromText` is null → may proceed (with optional notice)
 
-If both values are present and differ, the system stops and shows a clear message that node counts do not match. The editor cannot proceed to visualisation until they manually correct the pattern JSON in the text area to align with the intended number of cones, or update the drill text. There is no option to "ignore and continue" here.
+**Resolution:** Editor manually corrects JSON or updates drill text. No "ignore and continue" option.
 
-If totalNodesFromText is null but totalNodesFromJSON is present, the system may proceed, optionally mentioning that the count could not be determined from the description.
+---
 
-Setup clarification and refinement
+## 8. Setup Clarification and Refinement
 
-If the AI cannot confidently produce nodeCoordinates from the drill text, or if nodeMappings is incomplete while the drill text references zones or special roles, the system displays clarification prompts.
+### 8.1 Purpose
+Help editor improve setup description so geometric layout can be accurately determined
 
-The purpose of these prompts is to help the editor improve their setup description so that the geometric layout can be accurately determined. This is not about validating the JSON pattern, but about ensuring the nodes are placed correctly on the canvas to match the intended physical setup.
+**This is NOT about validating JSON pattern** - it's about ensuring nodes are placed correctly on canvas to match intended physical setup
 
-Typical queries might be:
+### 8.2 When Clarification Occurs
+- AI cannot confidently produce `nodeCoordinates`
+- `nodeMappings` is incomplete while drill text references zones/special roles
 
-"Your drill mentions 12 EyeQ SmartCones placed around the field. Please confirm which node numbers correspond to each side or zone, for example: Nodes 1–3 north sideline, 4–6 east sideline, 7–9 south sideline, 10–12 west sideline."
+### 8.3 Example Clarification Prompts
 
-"The exact positions of the four cones are unclear. Please describe their arrangement, for example: 'Cones 1–4 form a square, 10 metres apart, centred in the pitch'."
+**For zone mapping:**
+```
+"Your drill mentions 12 EyeQ SmartCones placed around the field. 
+Please confirm which node numbers correspond to each side or zone, for example:
+- Nodes 1–3 north sideline
+- Nodes 4–6 east sideline
+- Nodes 7–9 south sideline
+- Nodes 10–12 west sideline"
+```
 
-The editor can answer these questions in a simple text input. The implementation can choose whether to re-call the AI with this extra context or apply a small local helper to generate or adjust nodeCoordinates.
+**For geometric placement:**
+```
+"The exact positions of the four cones are unclear. 
+Please describe their arrangement, for example:
+'Cones 1–4 form a square, 10 metres apart, centred in the pitch'"
+```
 
-The goal of this interaction is to iterate on the setup description until the AI can confidently place all nodes on the canvas in positions that match the editor's physical drill setup.
+### 8.4 Editor Response
+- Editor answers in simple text input
+- Implementation choice: re-call AI with extra context OR apply local helper to adjust coordinates
 
-Visualisation and animation
+### 8.5 Iteration Goal
+Iterate on setup description until AI can confidently place all nodes in positions matching editor's physical drill setup
 
-Once node counts, node duration consistency and geometric placement are established, the system shows a 2D visualisation area.
+---
 
-Pitch and zones
+## 9. Visualization and Animation
 
-The pitch is represented as a plain 2D rectangle, typically corresponding to dimensions found in the drill (for example 35 x 25 metres, 40 x 15 metres) but scaled to fit the screen.
+### 9.1 Pitch Display
 
-Zones or key areas mentioned in the drill (such as "four zones", "sidelines", "behind goals") are drawn as simple boundaries or labels where the AI or deterministic logic can infer them.
+**Representation:** Plain 2D rectangle
 
-Nodes and labelling
+**Dimensions:**
+- Derived from drill description (e.g., "35 x 25 metres", "40 x 15 metres")
+- Scaled to fit screen
 
-Each node is drawn as a small symbol, such as a triangle or circle, positioned at its (x, y) coordinate.
+**Zones:**
+- Key areas drawn as simple boundaries or labels (e.g., "four zones", "sidelines", "behind goals")
+- Inferred by AI or deterministic logic
 
-Each node must display its node id (1, 2, 3, etc.) clearly enough to be readable on desktop and tablet screens.
+### 9.2 Node Display
 
-The symbol's fill colour is driven by the currently active phase in the pattern JSON.
+**Symbol:** Small triangle or circle at (x, y) coordinate
 
-Animation of phases
+**Labeling:** 
+- Each node displays its node ID (1, 2, 3, etc.)
+- Must be readable on desktop and tablet screens
 
-The system loops through phases in the order given in the JSON.
+**Color:**
+- Fill color driven by currently active phase in JSON
+- Color = "Black" → rendered as off, dark, or neutral
 
-For each phase, it reads nodes and applies the colour for each node; nodes where colour is "Black" can be rendered as off, dark or neutral.
+### 9.3 Animation Behavior
 
-Each phase runs for an effective duration based on secs and the current speed multiplier. A simple approach is to use the maximum secs value in that phase as the phase length, or to use an average or sum, as long as the behaviour is consistent and documented for development.
+**Phase Loop:**
+1. System loops through phases in JSON order
+2. For each phase, apply color to each node
+3. Phase duration = based on `secs` and current speed multiplier
+4. After final phase → loop back to phase one
 
-After the final phase, the animation loops back to phase one.
+**Phase Duration Calculation:**
+- Use maximum `secs` value in that phase, OR
+- Use average or sum of `secs` values
+- Must be consistent and documented for development
 
-The editor watches this animation to assess whether the pattern behavior makes sense for their drill. If it does not, the editor manually edits the JSON pattern and re-runs the animation.
+**Editor Assessment:**
+- Editor watches animation to assess if pattern behavior makes sense for their drill
+- If not → editor manually edits JSON and re-runs animation
 
-Interactive controls
+---
 
-Controls near the visualisation include at least:
+## 10. Interactive Controls
 
-A play or pause toggle to start or stop the animation loop.
+### 10.1 Play/Pause Toggle
+Start or stop the animation loop
 
-A speed control that applies a global multiplier to all secs values when calculating phase timings, with supported multipliers 0.5, 1.0, 1.5 and 2.0. For example, at 2.0, a node with secs 4 will be displayed for the equivalent of 2 seconds.
+### 10.2 Speed Control
 
-The speed control should not change the JSON itself; it only affects the visual playback.
+**Multipliers supported:** 0.5×, 1.0×, 1.5×, 2.0×
 
-Live editing behaviour
+**Behavior:**
+- Applies global multiplier to all `secs` values for phase timing calculation
+- Example: At 2.0×, a node with `secs: 4` displays for equivalent of 2 seconds
 
-On the visualisation screen, the current pattern JSON is always visible in a text area. The editor can change values directly and then trigger an update.
+**Important:** Speed control does NOT modify JSON itself - only affects visual playback
 
-Two types of change are supported.
+---
 
-Simple live tweak
+## 11. Live Editing Behavior
 
-Simple tweaks include changes to colour values and secs values, without adding or removing nodes, phases or pattern keys.
+### 11.1 JSON Visibility
+Current pattern JSON always visible in text area on visualization screen
 
-When the editor makes such tweaks and presses "Update animation" (or similar), the system:
+### 11.2 Two Edit Types
 
-Parses the JSON and, if successful, validates node duration consistency.
+#### 11.2.1 Simple Live Tweak (No AI Call)
 
-If validation passes, applies the new values, keeps the existing nodeCoordinates and layout, and restarts the animation from phase one using the new secs and colours.
+**What qualifies:**
+- Changes to `color` values
+- Changes to `secs` values
+- NO adding/removing nodes, phases, or pattern keys
 
-If node duration consistency validation fails, displays an error message without updating the animation.
+**Process when editor presses "Update Animation":**
+1. Parse JSON
+2. Validate node duration consistency
+3. If valid:
+   - Apply new values
+   - Keep existing `nodeCoordinates` and layout
+   - Restart animation from phase one with new `secs` and colors
+4. If invalid:
+   - Display error message
+   - Do not update animation
 
-No AI call is required for this re-run. Errors in basic JSON parsing can be shown as a simple message ("Cannot parse JSON, please check commas and brackets") without extra behaviour.
+**Error handling:**
+- JSON parsing errors → simple message: "Cannot parse JSON, please check commas and brackets"
 
-Structural change
+#### 11.2.2 Structural Change (Full Re-interpretation)
 
-Structural changes include adding or removing nodes, adding or removing phases, or changing anything that affects node count or mapping, including changes to drill text.
+**What qualifies:**
+- Adding or removing nodes
+- Adding or removing phases
+- Changing anything affecting node count or mapping
+- Changes to drill text
 
-When the editor indicates that a structural change has been made, or presses a "Re-interpret setup" button, the system:
+**Process when editor presses "Re-interpret Setup":**
+1. Re-parse JSON
+2. Call AI again with latest drill text and pattern JSON
+3. Re-apply all automatic validation checks
+4. Re-apply clarification process if needed
+5. Potentially generate new `nodeCoordinates`
+6. May ask for further setup clarifications
+7. Only after complete → return to visualization
 
-Re-parses the JSON.
+**UI Requirement:**
+Interface must clearly distinguish between:
+- "Update animation only" (simple tweak)
+- "Re-interpret setup and layout" (structural change)
 
-Calls the AI again with the latest drill text and pattern JSON.
+---
 
-Re-applies the automatic validation checks and clarification process described earlier.
+## 12. Stretch Goal: Additional Visual Elements
 
-Potentially generates new nodeCoordinates and may ask for further clarifications about the setup.
+### 12.1 Priority
+🎯 **STRETCH GOAL** - Secondary to primary objective
 
-Only after this process completes does the system return to the visualisation step.
+**Primary objective:** Interpret setup description, place nodes correctly, animate pattern for editor assessment
 
-The user interface must make it clear which action is a quick animation update and which action triggers a full re-interpretation of the setup. It is acceptable to label the two buttons differently, for example "Update animation only" and "Re-interpret setup and layout".
+**Stretch goal:** Enhance visualization for documentation purposes
 
-Stretch goal: Additional visual elements for documentation
+### 12.2 Purpose
+Allow editor to manually place additional visual elements on canvas to create complete drill setup diagram
 
-Purpose and priority
+**Not part of:**
+- Setup interpretation process
+- JSON validation process
 
-This feature is a stretch goal and secondary to the primary objective of visualizing drill setup and animating JSON patterns. The primary goal is to interpret the setup description, place nodes correctly, and animate the pattern so the editor can assess whether it makes sense. This stretch goal enhances the visualization for documentation purposes only.
+### 12.3 Element Types
 
-Requirement
+| Element | Purpose |
+|---------|---------|
+| **Black round markers/dots** | Additional reference points, boundary markers, non-EyeQ cones |
+| **Goal icons** | Mini-goals or full-size goals |
+| **Player icons** | Starting positions or key player positions |
 
-The editor should be able to manually place additional visual elements on the visualization canvas to create a more complete drill setup diagram. These elements complement the numbered node triangles but are not part of the setup interpretation or JSON validation process.
+**Design requirement:** Must be clearly distinguishable from numbered node triangles (EyeQ SmartCones)
 
-Element types
+### 12.4 Interaction Model
 
-The system should support drag-and-drop placement of at least the following element types:
+**Placement:**
+1. Editor selects element type from toolbar/palette
+2. Editor clicks or drags to place on canvas
 
-Black round markers or dots, to represent additional reference points, boundary markers or non-EyeQ cones.
+**Repositioning:**
+- Drag element to new location
 
-Goal icons, to represent mini-goals or full-size goals.
+**Deletion:**
+- Drag off canvas, OR
+- Click delete button, OR
+- Similar simple mechanism
 
-Player icons, to represent starting positions or key positions for players.
+**Manual only:** These elements are NOT inferred from drill text or JSON - editor places based on their own knowledge
 
-The exact visual design of these icons is flexible, but they must be clearly distinguishable from the numbered node triangles that represent EyeQ SmartCones.
+### 12.5 Relationship to Core Functionality
 
-Interaction model
+**No relationship to:**
+- JSON pattern
+- Setup interpretation process
+- Animation behavior
 
-The editor uses a simple toolbar or palette to select an element type, then clicks or drags to place it on the canvas.
+**Behavior:**
+- Adding/moving/removing elements does NOT trigger re-interpretation
+- Elements remain static during animation
+- Do NOT change color or respond to phases
 
-Placed elements can be repositioned by dragging them to a new location.
+### 12.6 Use Case
+**Primary use case:** Screenshot for documentation
 
-Placed elements can be deleted, either by dragging them off the canvas, clicking a delete button, or using a similar simple mechanism.
+**Workflow:**
+1. System interprets setup and places numbered nodes
+2. System animates JSON pattern
+3. Editor manually adds goals, players, markers
+4. Editor captures screenshot
+5. Screenshot used in documentation, training materials, drill libraries
 
-These elements are not inferred from the drill text or JSON pattern. The editor places them manually based on their own knowledge of the drill setup.
+### 12.7 Implementation Notes
 
-Relationship to JSON and animation
+**Priority:** Core functionality (setup interpretation + animation) takes absolute priority
 
-These additional elements have no relationship to the JSON pattern or the setup interpretation process. They exist purely as visual documentation aids.
+**Storage:** 
+- In-browser memory only
+- No persistence required
+- Page refresh clears additional elements (acceptable - output is screenshot)
 
-Adding, moving or removing these elements does not trigger re-interpretation or affect the animation in any way.
+**Decision criteria:**
+- ✅ Straightforward to implement → adds significant practical value
+- ❌ Introduces complexity or delays core functionality → defer to future version
 
-These elements remain static on the canvas during animation; they do not change colour or respond to phases.
+---
 
-Screenshot and documentation use case
+## 13. Technical Requirements
 
-The primary use case for this feature is to allow the editor to create a comprehensive setup diagram that shows both the interpreted EyeQ cone layout (with numbered nodes) and other drill elements such as goals and player positions.
+### 13.1 Platform
+**Browser-based:** Must run in modern browsers
 
-The editor can then capture a screenshot of this enhanced visualization to use alongside the drill description in documentation, training materials or drill libraries.
+**Target devices:**
+- Desktop (primary)
+- Tablet (primary)
+- Mobile optimization NOT required
 
-Implementation notes
+### 13.2 Rendering
+**Technology options:** Canvas, SVG, or any simple 2D approach
 
-This feature is explicitly marked as a stretch goal. If time or resources are limited, the core setup interpretation and animation functionality takes absolute priority.
+**Choice:** Left to implementation team
 
-The placement and storage of these elements can be handled entirely in-browser memory. There is no requirement to persist or save these placements; if the editor refreshes the page, the additional elements can be cleared without issue, as the primary output is a screenshot taken by the editor.
+### 13.3 Backend
+**Minimal functionality required:**
+- Accept text inputs
+- Call AI parsing service
+- Return AI's structured response to front end
 
-If implementing this feature proves straightforward, it adds significant practical value. If it introduces complexity or delays the core functionality, it should be deferred to a future version.
+**Not required:**
+- Server-side persistence
+- User accounts
+- Session management
 
-Non-functional and technical notes
+### 13.4 Debug Logging
+**Optional:** AI calls and parsing behavior
 
-The tool must run in a modern browser. Desktop and tablet use are the primary targets; mobile optimisation is not required.
+**Purpose:** Development and support only
 
-The pitch and nodes can be rendered using canvas, SVG or any other simple 2D approach. Choice of technology is up to the implementation team.
+**Not required:** Expose to editor in UI
 
-Back end functionality is minimal. It must accept text inputs, call the AI parsing service and return the AI's structured response to the front end. No server-side persistence is required.
+---
 
-Any debug logging of AI calls or parsing behaviour is optional and is intended purely for development and support. It does not need to be exposed to the editor in the user interface.
+## 14. Out of Scope
 
-Out-of-scope features
+The following features are **explicitly excluded** from this version:
 
-The following features are explicitly out of scope for this version:
+| Feature | Reason |
+|---------|--------|
+| ❌ 3D visualization or camera views | Complexity beyond requirements |
+| ❌ Audio cues or sound effects | Not needed for primary objective |
+| ❌ Multi-user collaboration | Single-user tool |
+| ❌ Accounts or role management | No persistence required |
+| ❌ Persistent drill storage | Copy/paste sufficient |
+| ❌ Server-side pattern saving | Copy/paste sufficient |
+| ❌ File download functionality | Screenshot sufficient |
+| ❌ Automatic JSON pattern validation | Human editor judges if pattern makes sense |
+| ❌ AI validation of pattern "correctness" | Editor watches animation and decides |
+| ❌ Automatic placement of goals/players | Stretch goal is manual placement only |
+| ❌ JSON pattern generation from descriptions | Tool only visualizes pre-existing JSON |
 
-3D visualisation or camera views.
+---
 
-Audio cues or sound effects.
+## 15. Example Drills for Testing
 
-Multi-user collaboration, accounts or role management.
+### 15.1 Pass to the Cone Matching the Pass-From Colour
+- **Setup:** Four cones arranged in a square, plus a central player
+- **Nodes:** 1 to 4
+- **JSON:** Pattern cycles colors across nodes 1-4 in several phases
 
-Persistent drill storage, saving patterns to a server or file download. Keeping the editor fields on screen for copy and paste is sufficient.
+### 15.2 Dribble with the Ball Through Chaos
+- **Setup:** 12 EyeQ SmartCones numbered 1-12 around perimeter of larger pitch
+- **Nodes:** 1 to 12
+- **JSON:** Phases light different cones using Red, Green, Yellow, Blue, Black
 
-Automatic validation of whether a JSON pattern is "appropriate" or "correct" for a given drill. The tool interprets setup descriptions and animates patterns; the human editor judges whether the pattern behavior makes sense.
+### 15.3 Scan to Strike
+- **Setup:** Four mini-goals with four EyeQ cones behind each goal on 35 x 25 metre area
+- **Nodes:** 4 nodes (one per goal)
+- **JSON:** One cone lights up per phase while others remain dark (indicating active goal)
 
-Automatic inference or AI-assisted placement of additional visual elements such as goals or players from the drill text. The stretch goal feature allows manual placement only.
+### 15.4 Testing Objective
+System should be able to:
+1. Take drill text and JSON from each example
+2. Interpret setup description to generate node layout
+3. Display simple animated 2D view
+4. Allow editor to visually assess if pattern behavior matches drill intent
 
-Generation or creation of EyeQ JSON patterns from drill descriptions. The tool only visualizes pre-existing JSON patterns provided by the editor.
+---
 
-Example drills for reference
+## Document Version
+**Last updated:** [Date to be inserted]
 
-The following drills serve as realistic examples of inputs for this tool and can be used for test cases:
-
-Pass to the cone matching the pass-from colour, with four cones arranged in a square, a central player and a JSON pattern that cycles colours across nodes 1 to 4 in several phases.
-
-Dribble with the ball through chaos, with 12 EyeQ SmartCones numbered 1 to 12 placed around the perimeter of a larger pitch, and JSON phases that light different cones using colours such as Red, Green, Yellow, Blue and Black.
-
-Scan to strike, with four mini-goals and four EyeQ cones positioned behind each goal on a 35 x 25 metre area, and a pattern where one cone lights up for a period while others remain dark, reflecting which goal is active at that moment.
-
-The system should be able to take the text and JSON from each of these examples, interpret the setup description to generate a node layout, and display a simple animated 2D view that allows an editor to visually assess whether the pattern behavior matches their drill intent.
+**Status:** Draft for development handover
