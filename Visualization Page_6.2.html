@@ -125,12 +125,12 @@
     .cone:active{cursor:grabbing}
     .cone.off{opacity:.35}
     .cone.on{opacity:1}
-    .cone.red{background:rgba(255,90,122,.22);border-color:rgba(255,90,122,.6)}
-    .cone.blue{background:rgba(90,167,255,.22);border-color:rgba(90,167,255,.6)}
-    .cone.green{background:rgba(79,224,138,.22);border-color:rgba(79,224,138,.6)}
-    .cone.yellow{background:rgba(255,210,80,.22);border-color:rgba(255,210,80,.6);color:#fff6d6}
-    .cone.white{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.45)}
-    .cone.purple{background:rgba(186,104,255,.18);border-color:rgba(186,104,255,.55)}
+    .cone.red{background:rgba(255,60,90,.75);border-color:rgba(255,60,90,.95);box-shadow:0 0 20px rgba(255,60,90,.5)}
+    .cone.blue{background:rgba(60,150,255,.75);border-color:rgba(60,150,255,.95);box-shadow:0 0 20px rgba(60,150,255,.5)}
+    .cone.green{background:rgba(50,230,120,.75);border-color:rgba(50,230,120,.95);box-shadow:0 0 20px rgba(50,230,120,.5)}
+    .cone.yellow{background:rgba(255,220,50,.75);border-color:rgba(255,220,50,.95);color:#2a2600;box-shadow:0 0 20px rgba(255,220,50,.5)}
+    .cone.white{background:rgba(255,255,255,.70);border-color:rgba(255,255,255,.90);box-shadow:0 0 20px rgba(255,255,255,.4)}
+    .cone.purple{background:rgba(200,100,255,.70);border-color:rgba(200,100,255,.90);box-shadow:0 0 20px rgba(200,100,255,.4)}
     .controls{display:flex;flex-direction:column;gap:10px;margin-top:10px}
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     input[type="range"]{width:100%}
@@ -544,8 +544,7 @@
 
       t += dt * speedMultiplier;
       if (t >= totalDuration) {
-        t = totalDuration;
-        stopPlayback();
+        t = 0; // Loop back to start
       }
       updateFromTime();
       rafId = requestAnimationFrame(tick);
