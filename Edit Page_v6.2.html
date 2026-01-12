@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EyeQ Drill Editor</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --txt:#e7ecff;
+      --muted:#aeb8e6;
+      --border:rgba(255,255,255,.12);
+      --ok:#4fe08a;
+      --danger:#ff5a7a;
+      --accent:#5aa7ff;
+      --card:rgba(255,255,255,.06);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+      background:radial-gradient(1200px 600px at 20% 0%,rgba(90,167,255,.18),transparent 55%),
+                 radial-gradient(900px 500px at 80% 20%,rgba(125,240,200,.12),transparent 60%),
+                 var(--bg);
+      color:var(--txt);
+    }
+    .wrap{max-width:1100px;margin:0 auto;padding:28px 18px 42px}
+    header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px}
+    h1{margin:0;font-size:22px}
+    p{margin:6px 0 0;color:var(--muted);font-size:13px}
+    .pill{
+      padding:6px 10px;border:1px solid var(--border);border-radius:999px;
+      background:rgba(255,255,255,.05);color:var(--muted);font-size:12px;white-space:nowrap
+    }
+    .card{
+      background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.03));
+      border:1px solid var(--border);
+      border-radius:14px;
+      overflow:hidden;
+      box-shadow:0 14px 40px rgba(0,0,0,.25);
+    }
+    .card-h{
+      padding:14px 16px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.14);
+      display:flex;align-items:center;justify-content:space-between;gap:12px
+    }
+    main{padding:16px}
+    .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}
+    @media (max-width:900px){.grid{grid-template-columns:1fr}}
+    textarea{
+      width:100%;min-height:480px;resize:vertical;
+      background:rgba(0,0,0,.22);border:1px solid var(--border);border-radius:12px;
+      padding:14px;color:var(--txt);
+      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+      font-size:12.5px;line-height:1.5;outline:none;
+    }
+    textarea:focus{border-color:rgba(90,167,255,.5);box-shadow:0 0 0 3px rgba(90,167,255,.15)}
+    .box{
+      padding:14px;border:1px solid var(--border);border-radius:12px;background:rgba(0,0,0,.14);
+    }
+    .box h3{margin:0 0 10px;font-size:13px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:.2px}
+    label{display:block;color:var(--muted);font-size:13px;margin:0 0 6px}
+    select{
+      width:100%;background:rgba(0,0,0,.22);border:1px solid var(--border);border-radius:10px;
+      padding:10px;color:var(--txt);outline:none;font-size:14px
+    }
+    select:focus{border-color:rgba(90,167,255,.5);box-shadow:0 0 0 3px rgba(90,167,255,.15)}
+    .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    button{
+      border:1px solid var(--border);background:rgba(255,255,255,.06);color:var(--txt);
+      padding:10px 12px;border-radius:12px;font-size:14px;cursor:pointer;
+      transition:transform .08s ease, background .15s ease, border-color .15s ease;
+    }
+    button:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.18)}
+    button:active{transform:translateY(1px)}
+    .btn-primary{
+      background:linear-gradient(180deg,rgba(125,240,200,.92),rgba(125,240,200,.65));
+      border-color:rgba(125,240,200,.5);
+      color:#041014;
+      font-weight:650;
+    }
+    .btn-danger{
+      background:rgba(255,90,122,.12);border-color:rgba(255,90,122,.35)
+    }
+    .btn-danger:hover{background:rgba(255,90,122,.18);border-color:rgba(255,90,122,.45)}
+    .meta{
+      margin-top:12px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);
+      background:rgba(0,0,0,.14);color:var(--muted);font-size:13px;line-height:1.4;min-height:44px;
+      display:flex;align-items:center
+    }
+    .meta.ok{border-color:rgba(79,224,138,.35);background:rgba(79,224,138,.10);color:#c8ffe1}
+    .meta.err{border-color:rgba(255,90,122,.35);background:rgba(255,90,122,.10);color:#ffd0da;align-items:flex-start}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>EyeQ Drill Editor</h1>
+        <p>Paste your JSON, validate, then open the visualiser.</p>
+      </div>
+      <div class="pill">v6.2</div>
+    </header>
+
+    <div class="card">
+      <div class="card-h">
+        <div class="pill">Editor</div>
+        <div class="pill">sessionStorage hand-off</div>
+      </div>
+
+      <main>
+        <div class="grid">
+          <section>
+            <textarea id="jsonInput" placeholder="Paste your config here..."></textarea>
+          </section>
+
+          <section>
+            <div class="box">
+              <h3>Layout</h3>
+              <label for="layoutSelect">Cone layout</label>
+              <select id="layoutSelect">
+                <option value="circle">Circle</option>
+                <option value="square">Square</option>
+                <option value="triangle">Triangle</option>
+                <option value="rectangle">Rectangle</option>
+              </select>
+
+              <div class="btn-row">
+                <button id="btnReset" class="btn-danger">Reset</button>
+                <button id="btnVisualise" class="btn-primary">Visualisation</button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div id="validationBox" class="meta">Validation: awaiting check.</div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const VISUAL_PAGE = "./Visualization Page_6.2.html";
+    const STORAGE_CONFIG_KEY = "eyeq_config";
+    const STORAGE_LAYOUT_KEY = "eyeq_layout";
+
+    const jsonInput = document.getElementById("jsonInput");
+    const layoutSelect = document.getElementById("layoutSelect");
+    const btnReset = document.getElementById("btnReset");
+    const btnVisualise = document.getElementById("btnVisualise");
+    const validationBox = document.getElementById("validationBox");
+
+    function setValidation(ok, message) {
+      validationBox.classList.remove("ok", "err");
+      validationBox.textContent = "";
+
+      if (ok) {
+        validationBox.classList.add("ok");
+        validationBox.textContent = message;
+      } else {
+        validationBox.classList.add("err");
+        validationBox.textContent = message;
+      }
+    }
+
+    function extractPhases(config) {
+      if (config && Array.isArray(config.phases)) return config.phases;
+
+      if (config && typeof config === "object") {
+        const patternKey = Object.keys(config).find(k => k.startsWith("pattern_"));
+        if (patternKey && config[patternKey] && Array.isArray(config[patternKey].phases)) {
+          return config[patternKey].phases;
+        }
+      }
+      return [];
+    }
+
+    function validateNodeTotals(config) {
+      const phases = extractPhases(config);
+      if (!phases.length) return { ok: false, message: "Validation failed: no phases found." };
+
+      const totals = new Map(); // node -> secs sum
+
+      phases.forEach((phase) => {
+        (phase.nodes || []).forEach((n) => {
+          const nodeNum = Number(n?.node);
+          const secs = Number(n?.secs);
+          if (!Number.isFinite(nodeNum) || !Number.isFinite(secs)) return;
+          totals.set(nodeNum, (totals.get(nodeNum) || 0) + secs);
+        });
+      });
+
+      const entries = Array.from(totals.entries()).sort((a,b) => a[0] - b[0]);
+      if (!entries.length) return { ok: false, message: "Validation failed: no nodes found." };
+
+      const target = entries[0][1];
+      const mismatches = entries.filter(([,sum]) => sum !== target);
+
+      if (mismatches.length) {
+        const detail = entries.map(([node,sum]) => `node ${node}: ${sum}s`).join(" | ");
+        return { ok: false, message: "Totals mismatch: " + detail };
+      }
+
+      return { ok: true, message: `Totals aligned: ${target}s for all nodes.` };
+    }
+
+    // Optional convenience: reload last config if present
+    (function preloadIfAvailable(){
+      const stored = sessionStorage.getItem(STORAGE_CONFIG_KEY);
+      if (stored && !jsonInput.value.trim()) {
+        try {
+          const obj = JSON.parse(stored);
+          jsonInput.value = JSON.stringify(obj, null, 2);
+        } catch (e) {}
+      }
+      const storedLayout = sessionStorage.getItem(STORAGE_LAYOUT_KEY);
+      if (storedLayout) layoutSelect.value = storedLayout;
+    })();
+
+    btnReset.addEventListener("click", () => {
+      jsonInput.value = "";
+      setValidation(false, "Validation: awaiting check.");
+      sessionStorage.removeItem(STORAGE_CONFIG_KEY);
+      sessionStorage.removeItem(STORAGE_LAYOUT_KEY);
+    });
+
+    btnVisualise.addEventListener("click", () => {
+      const raw = jsonInput.value.trim();
+      if (!raw) {
+        setValidation(false, "Validation failed: no JSON provided.");
+        return;
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (e) {
+        setValidation(false, "Validation failed: invalid JSON.");
+        return;
+      }
+
+      const result = validateNodeTotals(parsed);
+      setValidation(result.ok, result.message);
+      if (!result.ok) return;
+
+      const layout = layoutSelect.value || "circle";
+
+      sessionStorage.setItem(STORAGE_LAYOUT_KEY, layout);
+      sessionStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(parsed));
+
+      window.location.href = VISUAL_PAGE;
+    });
+  </script>
+</body>
+</html>

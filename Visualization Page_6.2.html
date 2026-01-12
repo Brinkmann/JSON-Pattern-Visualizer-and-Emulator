@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>EyeQ Visualiser</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --txt:#e7ecff;
+      --muted:#aeb8e6;
+      --border:rgba(255,255,255,.12);
+      --danger:#ff5a7a;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+      background:radial-gradient(1200px 600px at 20% 0%,rgba(90,167,255,.18),transparent 55%),
+                 radial-gradient(900px 500px at 80% 20%,rgba(125,240,200,.12),transparent 60%),
+                 var(--bg);
+      color:var(--txt);
+    }
+    .wrap{max-width:1200px;margin:0 auto;padding:18px 14px 30px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+    header h1{margin:0;font-size:18px;letter-spacing:.2px}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+    .chip{
+      padding:7px 10px;border:1px solid var(--border);border-radius:999px;
+      background:rgba(255,255,255,.05);color:var(--muted);font-size:12px;white-space:nowrap
+    }
+    button{
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.06);
+      color:var(--txt);
+      padding:10px 12px;
+      border-radius:12px;
+      font-size:14px;
+      cursor:pointer;
+      transition:transform .08s ease, background .15s ease, border-color .15s ease;
+    }
+    button:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.18)}
+    button:active{transform:translateY(1px)}
+    .btn-primary{
+      background:linear-gradient(180deg,rgba(90,167,255,.9),rgba(90,167,255,.65));
+      border-color:rgba(90,167,255,.5);
+      color:#071022;
+      font-weight:650;
+    }
+    .btn-ok{
+      background:linear-gradient(180deg,rgba(125,240,200,.92),rgba(125,240,200,.65));
+      border-color:rgba(125,240,200,.5);
+      color:#041014;
+      font-weight:650;
+    }
+    .btn-danger{
+      background:rgba(255,90,122,.12);
+      border-color:rgba(255,90,122,.35);
+    }
+    .btn-danger:hover{background:rgba(255,90,122,.18);border-color:rgba(255,90,122,.45)}
+    .card{
+      border:1px solid var(--border);
+      border-radius:14px;
+      overflow:hidden;
+      background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.03));
+      box-shadow:0 14px 40px rgba(0,0,0,.25);
+    }
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 300px;
+      min-height:74vh;
+    }
+    @media (max-width:980px){.grid{grid-template-columns:1fr}}
+    .stage{
+      position:relative;
+      padding:14px;
+      border-right:1px solid var(--border);
+      background:rgba(0,0,0,.12);
+      overflow:hidden;
+    }
+    @media (max-width:980px){.stage{border-right:none;border-bottom:1px solid var(--border)}}
+    .side{padding:14px;background:rgba(0,0,0,.10)}
+    .status{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+    .status-line{font-size:13px;color:var(--muted)}
+    .warning{
+      display:none;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,90,122,.35);
+      background:rgba(255,90,122,.10);
+      color:#ffd0da;
+      font-size:13px;
+      line-height:1.4;
+    }
+    .field{
+      position:relative;
+      width:100%;
+      aspect-ratio: 16 / 9;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.16);
+      background:
+        linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01)),
+        radial-gradient(circle at 50% 50%, rgba(90,167,255,.12), transparent 60%),
+        rgba(0,0,0,.18);
+      overflow:hidden;
+      user-select:none;
+    }
+    .cone{
+      position:absolute;
+      width:44px;
+      height:44px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.18);
+      background:rgba(255,255,255,.08);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:700;
+      font-size:14px;
+      color:var(--txt);
+      transform:translate(-50%,-50%);
+      box-shadow:0 10px 26px rgba(0,0,0,.28);
+      cursor:grab;
+    }
+    .cone:active{cursor:grabbing}
+    .cone.off{opacity:.35}
+    .cone.on{opacity:1}
+    .cone.red{background:rgba(255,90,122,.22);border-color:rgba(255,90,122,.6)}
+    .cone.blue{background:rgba(90,167,255,.22);border-color:rgba(90,167,255,.6)}
+    .cone.green{background:rgba(79,224,138,.22);border-color:rgba(79,224,138,.6)}
+    .cone.yellow{background:rgba(255,210,80,.22);border-color:rgba(255,210,80,.6);color:#fff6d6}
+    .cone.white{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.45)}
+    .cone.purple{background:rgba(186,104,255,.18);border-color:rgba(186,104,255,.55)}
+    .controls{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    input[type="range"]{width:100%}
+    .small{font-size:12px;color:var(--muted)}
+    .speed-row{display:flex;gap:8px;flex-wrap:wrap}
+    .speed-chip{
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.05);
+      color:var(--muted);
+      padding:7px 10px;
+      border-radius:999px;
+      font-size:12px;
+      cursor:pointer;
+    }
+    .speed-chip.active{
+      border-color:rgba(90,167,255,.55);
+      background:rgba(90,167,255,.18);
+      color:#e9f3ff;
+    }
+    .divider{height:1px;background:var(--border);margin:12px 0}
+    .icon-sidebar-title{
+      margin:0 0 8px;
+      font-size:13px;
+      font-weight:650;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.2px;
+    }
+    .icon-list{display:flex;gap:10px;flex-wrap:wrap}
+    .icon-pill{
+      width:52px;height:52px;border-radius:14px;border:1px solid var(--border);
+      background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;
+      cursor:grab;user-select:none;overflow:hidden;
+    }
+    .icon-pill img{
+      width:34px;height:34px;object-fit:contain;pointer-events:none;
+      filter:drop-shadow(0 6px 14px rgba(0,0,0,.35));
+    }
+    .placed-icon{
+      position:absolute;width:42px;height:42px;transform:translate(-50%,-50%);
+      cursor:grab;user-select:none;z-index:20;
+    }
+    .placed-icon:active{cursor:grabbing}
+    .placed-icon img{
+      width:100%;height:100%;object-fit:contain;pointer-events:none;
+      filter:drop-shadow(0 8px 18px rgba(0,0,0,.35));
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>EyeQ Visualiser</h1>
+      <div class="toolbar">
+        <span class="chip" id="modeChip">Drill</span>
+        <button id="btnBack">Back</button>
+        <button id="btnPlay" class="btn-primary">Play</button>
+        <button id="btnStop">Stop</button>
+        <button id="btnCopy" class="btn-ok">Copy JSON</button>
+        <button id="btnExportImage">Export PNG</button>
+      </div>
+    </header>
+
+    <div class="card">
+      <div class="grid">
+        <div class="stage">
+          <div class="status">
+            <div class="status-line" id="statusLine">Ready.</div>
+            <div class="warning" id="warningBox">No config found. Go back to the editor.</div>
+          </div>
+          <div class="field" id="field"></div>
+        </div>
+
+        <div class="side">
+          <div class="controls">
+            <div class="row">
+              <div class="small">Time</div>
+              <div class="small" id="timeLabel">0.0s</div>
+            </div>
+            <input id="timeSlider" type="range" min="0" max="1000" step="1" value="0"/>
+
+            <div class="row">
+              <div class="small">Speed</div>
+              <div class="small" id="speedLabel">1.0x</div>
+            </div>
+            <div class="speed-row">
+              <div class="speed-chip active" data-speed="1">1x</div>
+              <div class="speed-chip" data-speed="1.5">1.5x</div>
+              <div class="speed-chip" data-speed="2">2x</div>
+              <div class="speed-chip" data-speed="3">3x</div>
+              <div class="speed-chip" data-speed="4">4x</div>
+            </div>
+
+            <div class="divider"></div>
+
+            <p class="icon-sidebar-title">Icons</p>
+            <div class="icon-list" id="iconList"></div>
+
+            <div class="row">
+              <button id="btnResetPositions" class="btn-danger">Reset cone positions</button>
+              <button id="btnClearIcons">Clear icons</button>
+            </div>
+
+            <div class="small">Tip: drag cones and icons. Double-click an icon to delete it.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+  <script>
+    const EDITOR_PAGE = "Edit Page_v6.2.html";
+    const STORAGE_CONFIG_KEY = "eyeq_config";
+    const STORAGE_LAYOUT_KEY = "eyeq_layout";
+
+    const fieldEl = document.getElementById("field");
+    const statusLineEl = document.getElementById("statusLine");
+    const warningBoxEl = document.getElementById("warningBox");
+    const timeSliderEl = document.getElementById("timeSlider");
+    const timeLabelEl = document.getElementById("timeLabel");
+    const speedLabelEl = document.getElementById("speedLabel");
+    const modeChipEl = document.getElementById("modeChip");
+
+    const btnBack = document.getElementById("btnBack");
+    const btnPlay = document.getElementById("btnPlay");
+    const btnStop = document.getElementById("btnStop");
+    const btnCopy = document.getElementById("btnCopy");
+    const btnExportImage = document.getElementById("btnExportImage");
+    const btnResetPositions = document.getElementById("btnResetPositions");
+    const btnClearIcons = document.getElementById("btnClearIcons");
+    const iconListEl = document.getElementById("iconList");
+
+    let config = null;
+    let layout = "circle";
+
+    let phases = [];
+    let segments = [];
+    let totalDuration = 0;
+
+    let nodeCount = 0;
+    let conePositions = [];
+    let coneEls = [];
+
+    let placedIcons = [];
+
+    let isPlaying = false;
+    let rafId = null;
+    let lastTs = 0;
+    let t = 0;
+    let speedMultiplier = 1;
+
+    function loadConfig() {
+      const stored = sessionStorage.getItem(STORAGE_CONFIG_KEY);
+      if (!stored) return null;
+      try { return JSON.parse(stored); } catch (e) { return null; }
+    }
+
+    function loadLayout() {
+      const stored = sessionStorage.getItem(STORAGE_LAYOUT_KEY);
+      return stored || "circle";
+    }
+
+    function extractPhases(cfg) {
+      if (cfg && Array.isArray(cfg.phases)) return cfg.phases;
+
+      if (cfg && typeof cfg === "object") {
+        const patternKey = Object.keys(cfg).find(k => k.startsWith("pattern_"));
+        if (patternKey && cfg[patternKey] && Array.isArray(cfg[patternKey].phases)) {
+          return cfg[patternKey].phases;
+        }
+      }
+      return [];
+    }
+
+    function computeNodeCount(phasesArr) {
+      let maxNode = 0;
+      phasesArr.forEach((p) => {
+        (p.nodes || []).forEach((n) => {
+          const nodeNum = Number(n?.node);
+          if (Number.isFinite(nodeNum) && nodeNum > maxNode) maxNode = nodeNum;
+        });
+      });
+      return maxNode;
+    }
+
+    function buildSegments() {
+      segments = [];
+      let tt = 0;
+
+      phases.forEach((phase, idx) => {
+        let longest = 0;
+        (phase.nodes || []).forEach((n) => {
+          const secs = Number(n?.secs);
+          if (Number.isFinite(secs) && secs > longest) longest = secs;
+        });
+
+        const start = tt;
+        const end = tt + longest;
+        segments.push({ start, end, phaseIndex: idx });
+        tt = end;
+      });
+
+      totalDuration = tt;
+    }
+
+    function getSegmentAtTime(time) {
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        if (time >= seg.start && time < seg.end) return seg;
+      }
+      if (segments.length) return segments[segments.length - 1];
+      return null;
+    }
+
+    function parseColour(value) {
+      if (value == null) return { off: true };
+      const s = String(value).trim().toLowerCase();
+
+      if (!s) return { off: true };
+      if (s === "black" || s === "off" || s === "none") return { off: true };
+
+      if (s === "red" || s === "blue" || s === "green" || s === "yellow" || s === "white" || s === "purple") {
+        return { off: false, key: s, css: null };
+      }
+
+      if (s.startsWith("#") || s.startsWith("rgb(") || s.startsWith("rgba(")) {
+        return { off: false, key: null, css: String(value).trim() };
+      }
+
+      // Allow any valid CSS colour name like "orange"
+      return { off: false, key: null, css: String(value).trim() };
+    }
+
+    function getPositions(shape, count) {
+      if (!count) return [];
+
+      if (count <= 4) {
+        const presets = {
+          square: [
+            { x: 25, y: 25 }, { x: 75, y: 25 }, { x: 25, y: 75 }, { x: 75, y: 75 }
+          ],
+          rectangle: [
+            { x: 20, y: 35 }, { x: 80, y: 35 }, { x: 20, y: 65 }, { x: 80, y: 65 }
+          ],
+          triangle: [
+            { x: 50, y: 20 }, { x: 25, y: 75 }, { x: 75, y: 75 }, { x: 50, y: 50 }
+          ],
+          circle: [
+            { x: 50, y: 20 }, { x: 80, y: 50 }, { x: 50, y: 80 }, { x: 20, y: 50 }
+          ]
+        };
+        return presets[shape].slice(0, count).map(p => ({ xPct: p.x, yPct: p.y }));
+      }
+
+      const pos = [];
+
+      if (shape === "circle") {
+        const cx = 50, cy = 50, r = 35;
+        for (let i = 0; i < count; i++) {
+          const a = (Math.PI * 2 * i) / count - Math.PI / 2;
+          pos.push({ xPct: cx + r * Math.cos(a), yPct: cy + r * Math.sin(a) });
+        }
+        return pos;
+      }
+
+      const makePerimeter = (left, right, top, bottom) => {
+        const side = Math.ceil(count / 4);
+        const pts = [];
+        for (let i = 0; i < side; i++) pts.push({ x: left + ((right - left) * i) / (side - 1 || 1), y: top });
+        for (let i = 0; i < side; i++) pts.push({ x: right, y: top + ((bottom - top) * i) / (side - 1 || 1) });
+        for (let i = 0; i < side; i++) pts.push({ x: right - ((right - left) * i) / (side - 1 || 1), y: bottom });
+        for (let i = 0; i < side; i++) pts.push({ x: left, y: bottom - ((bottom - top) * i) / (side - 1 || 1) });
+        return pts.slice(0, count).map(p => ({ xPct: p.x, yPct: p.y }));
+      };
+
+      if (shape === "square") return makePerimeter(20, 80, 20, 80);
+      if (shape === "rectangle") return makePerimeter(18, 82, 30, 70);
+
+      if (shape === "triangle") {
+        const A = { x: 50, y: 18 };
+        const B = { x: 20, y: 80 };
+        const C = { x: 80, y: 80 };
+        const perEdge = Math.ceil(count / 3);
+        const pts = [];
+
+        for (let i = 0; i < perEdge; i++) {
+          const u = i / (perEdge - 1 || 1);
+          pts.push({ x: A.x + (B.x - A.x) * u, y: A.y + (B.y - A.y) * u });
+        }
+        for (let i = 0; i < perEdge; i++) {
+          const u = i / (perEdge - 1 || 1);
+          pts.push({ x: B.x + (C.x - B.x) * u, y: B.y + (C.y - B.y) * u });
+        }
+        for (let i = 0; i < perEdge; i++) {
+          const u = i / (perEdge - 1 || 1);
+          pts.push({ x: C.x + (A.x - C.x) * u, y: C.y + (A.y - C.y) * u });
+        }
+        return pts.slice(0, count).map(p => ({ xPct: p.x, yPct: p.y }));
+      }
+
+      // fallback grid
+      for (let i = 0; i < count; i++) {
+        pos.push({ xPct: 15 + (70 * (i % 6)) / 5, yPct: 20 + (60 * Math.floor(i / 6)) / 4 });
+      }
+      return pos;
+    }
+
+    function ensurePositions() {
+      if (!conePositions.length || conePositions.length !== nodeCount) {
+        conePositions = getPositions(layout, nodeCount);
+      }
+    }
+
+    function renderField() {
+      fieldEl.innerHTML = "";
+      coneEls = [];
+
+      ensurePositions();
+
+      for (let i = 0; i < nodeCount; i++) {
+        const el = document.createElement("div");
+        el.className = "cone off";
+        el.textContent = String(i + 1);
+        el.dataset.node = String(i + 1);
+
+        const pos = conePositions[i] || { xPct: 50, yPct: 50 };
+        el.style.left = pos.xPct + "%";
+        el.style.top = pos.yPct + "%";
+
+        makeDraggable(el, (xPct, yPct) => {
+          conePositions[i] = { xPct, yPct };
+        });
+
+        fieldEl.appendChild(el);
+        coneEls.push(el);
+      }
+
+      placedIcons.forEach((ic) => fieldEl.appendChild(createPlacedIconElement(ic)));
+
+      updateFromTime();
+    }
+
+    function updateFromTime() {
+      const seg = getSegmentAtTime(t);
+      if (!seg) return;
+
+      const phase = phases[seg.phaseIndex] || {};
+      const nodes = Array.isArray(phase.nodes) ? phase.nodes : [];
+
+      const map = new Map();
+      nodes.forEach((n) => {
+        const nodeNum = Number(n?.node);
+        if (!Number.isFinite(nodeNum)) return;
+        map.set(nodeNum, parseColour(n?.color));
+      });
+
+      coneEls.forEach((el) => {
+        const idx = Number(el.dataset.node);
+
+        el.classList.remove("on","off","red","blue","green","yellow","white","purple");
+        el.style.backgroundColor = "";
+        el.style.borderColor = "";
+
+        const c = map.get(idx);
+        if (!c || c.off) {
+          el.classList.add("off");
+          return;
+        }
+
+        el.classList.add("on");
+
+        if (c.key) {
+          el.classList.add(c.key);
+          return;
+        }
+
+        if (c.css) {
+          el.style.backgroundColor = c.css;
+          el.style.borderColor = c.css;
+        }
+      });
+
+      statusLineEl.textContent = `Phase ${seg.phaseIndex + 1}/${phases.length} | ${Math.min(t,totalDuration).toFixed(1)}s / ${totalDuration.toFixed(1)}s`;
+      timeLabelEl.textContent = `${Math.min(t,totalDuration).toFixed(1)}s`;
+
+      const max = Math.max(1, Math.round(totalDuration * 10));
+      timeSliderEl.max = String(max);
+      timeSliderEl.value = String(Math.round(Math.min(t,totalDuration) * 10));
+    }
+
+    function startPlayback() {
+      if (!totalDuration || totalDuration <= 0) return;
+      if (isPlaying) return;
+      isPlaying = true;
+      lastTs = performance.now();
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function stopPlayback() {
+      isPlaying = false;
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+
+    function tick(ts) {
+      if (!isPlaying) return;
+      const dt = (ts - lastTs) / 1000;
+      lastTs = ts;
+
+      t += dt * speedMultiplier;
+      if (t >= totalDuration) {
+        t = totalDuration;
+        stopPlayback();
+      }
+      updateFromTime();
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function setSpeedMultiplier(v) {
+      speedMultiplier = v;
+      speedLabelEl.textContent = `${speedMultiplier.toFixed(1)}x`;
+      document.querySelectorAll(".speed-chip").forEach((b) => {
+        b.classList.toggle("active", Number(b.dataset.speed || "1") === v);
+      });
+    }
+
+    function copyJson() {
+      if (!config) return;
+      const text = JSON.stringify(config, null, 2);
+      navigator.clipboard.writeText(text).then(() => {
+        statusLineEl.textContent = "Copied JSON to clipboard.";
+      }).catch(() => {
+        statusLineEl.textContent = "Could not copy to clipboard.";
+      });
+    }
+
+    async function exportImage() {
+      statusLineEl.textContent = "Exporting PNG...";
+      try {
+        const canvas = await html2canvas(fieldEl, { backgroundColor: null, scale: 2 });
+        const a = document.createElement("a");
+        a.href = canvas.toDataURL("image/png");
+        a.download = "eyeq_field.png";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        statusLineEl.textContent = "PNG exported.";
+      } catch (e) {
+        statusLineEl.textContent = "Export failed.";
+      }
+    }
+
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+    function makeDraggable(el, onMove) {
+      let dragging = false;
+
+      const onDown = (ev) => {
+        ev.preventDefault();
+        dragging = true;
+        document.addEventListener("mousemove", onMoveEv);
+        document.addEventListener("mouseup", onUp);
+        document.addEventListener("touchmove", onTouchMoveEv, { passive: false });
+        document.addEventListener("touchend", onUp);
+      };
+
+      const onMoveEv = (ev) => {
+        if (!dragging) return;
+        const rect = fieldEl.getBoundingClientRect();
+        const xPct = clamp(((ev.clientX - rect.left) / rect.width) * 100, 0, 100);
+        const yPct = clamp(((ev.clientY - rect.top) / rect.height) * 100, 0, 100);
+        el.style.left = xPct + "%";
+        el.style.top = yPct + "%";
+        if (onMove) onMove(xPct, yPct);
+      };
+
+      const onTouchMoveEv = (ev) => {
+        if (!dragging) return;
+        ev.preventDefault();
+        const tt = ev.touches[0];
+        const rect = fieldEl.getBoundingClientRect();
+        const xPct = clamp(((tt.clientX - rect.left) / rect.width) * 100, 0, 100);
+        const yPct = clamp(((tt.clientY - rect.top) / rect.height) * 100, 0, 100);
+        el.style.left = xPct + "%";
+        el.style.top = yPct + "%";
+        if (onMove) onMove(xPct, yPct);
+      };
+
+      const onUp = () => {
+        dragging = false;
+        document.removeEventListener("mousemove", onMoveEv);
+        document.removeEventListener("mouseup", onUp);
+        document.removeEventListener("touchmove", onTouchMoveEv);
+        document.removeEventListener("touchend", onUp);
+      };
+
+      el.addEventListener("mousedown", onDown);
+      el.addEventListener("touchstart", onDown, { passive: false });
+    }
+
+    function initIconSidebar() {
+      const iconUrls = [
+        "https://objectstorage.ap-sydney-1.oraclecloud.com/n/sd2z6nfhfft4/b/football_EyeQ/o/football.png",
+        "https://objectstorage.ap-sydney-1.oraclecloud.com/n/sd2z6nfhfft4/b/football_EyeQ/o/goal.png",
+        "https://objectstorage.ap-sydney-1.oraclecloud.com/n/sd2z6nfhfft4/b/football_EyeQ/o/player.png"
+      ];
+
+      iconListEl.innerHTML = "";
+      iconUrls.forEach((src) => {
+        const pill = document.createElement("div");
+        pill.className = "icon-pill";
+        pill.draggable = true;
+
+        const img = document.createElement("img");
+        img.src = src;
+        img.alt = "icon";
+        pill.appendChild(img);
+
+        pill.addEventListener("dragstart", (ev) => {
+          ev.dataTransfer.setData("text/plain", src);
+        });
+
+        iconListEl.appendChild(pill);
+      });
+
+      fieldEl.addEventListener("dragover", (ev) => ev.preventDefault());
+      fieldEl.addEventListener("drop", (ev) => {
+        ev.preventDefault();
+        const src = ev.dataTransfer.getData("text/plain");
+        if (!src) return;
+
+        const rect = fieldEl.getBoundingClientRect();
+        const xPct = clamp(((ev.clientX - rect.left) / rect.width) * 100, 0, 100);
+        const yPct = clamp(((ev.clientY - rect.top) / rect.height) * 100, 0, 100);
+
+        const id = String(Date.now()) + "_" + Math.floor(Math.random() * 100000);
+        const ic = { id, xPct, yPct, src };
+        placedIcons.push(ic);
+        fieldEl.appendChild(createPlacedIconElement(ic));
+      });
+
+      btnClearIcons.addEventListener("click", () => {
+        placedIcons = [];
+        Array.from(fieldEl.querySelectorAll(".placed-icon")).forEach((el) => el.remove());
+      });
+
+      btnResetPositions.addEventListener("click", () => {
+        conePositions = [];
+        renderField();
+      });
+    }
+
+    function createPlacedIconElement(ic) {
+      const wrap = document.createElement("div");
+      wrap.className = "placed-icon";
+      wrap.dataset.iconId = ic.id;
+      wrap.style.left = ic.xPct + "%";
+      wrap.style.top = ic.yPct + "%";
+
+      const img = document.createElement("img");
+      img.src = ic.src;
+      img.alt = "placed icon";
+      wrap.appendChild(img);
+
+      makeDraggable(wrap, (xPct, yPct) => {
+        const idx = placedIcons.findIndex((p) => p.id === ic.id);
+        if (idx >= 0) placedIcons[idx] = { ...placedIcons[idx], xPct, yPct };
+      });
+
+      wrap.addEventListener("dblclick", () => {
+        const id = wrap.dataset.iconId;
+        placedIcons = placedIcons.filter((p) => p.id !== id);
+        wrap.remove();
+      });
+
+      return wrap;
+    }
+
+    function backToEditor() {
+      if (window.history.length > 1) window.history.back();
+      else window.location.href = EDITOR_PAGE;
+    }
+
+    function init() {
+      config = loadConfig();
+      layout = loadLayout();
+
+      if (!config) {
+        statusLineEl.textContent = "No config found. Go back to the editor and click Visualisation.";
+        warningBoxEl.style.display = "block";
+        return;
+      }
+
+      phases = extractPhases(config);
+      nodeCount = computeNodeCount(phases);
+
+      if (!phases.length || !nodeCount) {
+        statusLineEl.textContent = "Config loaded but phases/nodes were not found under pattern_*.phases.";
+        warningBoxEl.style.display = "block";
+        return;
+      }
+
+      buildSegments();
+      renderField();
+      updateFromTime();
+      initIconSidebar();
+      modeChipEl.textContent = "Drill";
+    }
+
+    btnPlay.addEventListener("click", startPlayback);
+    btnStop.addEventListener("click", stopPlayback);
+    btnCopy.addEventListener("click", copyJson);
+    btnExportImage.addEventListener("click", exportImage);
+    btnBack.addEventListener("click", backToEditor);
+
+    timeSliderEl.addEventListener("input", () => {
+      stopPlayback();
+      t = Number(timeSliderEl.value) / 10;
+      updateFromTime();
+    });
+
+    document.querySelectorAll(".speed-chip").forEach((btn) => {
+      btn.addEventListener("click", () => setSpeedMultiplier(Number(btn.dataset.speed || "1")));
+    });
+
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>
