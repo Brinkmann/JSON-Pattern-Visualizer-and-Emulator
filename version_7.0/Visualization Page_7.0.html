@@ -355,8 +355,22 @@
       return Array.from(set);
     }
 
+    function computeNodeTotalSeconds(phases){
+      const totals = new Map();
+      (phases || []).forEach(ph=>{
+        (ph.nodes || []).forEach(n=>{
+          const id = n.node;
+          const secs = Number(n.secs) || 0;
+          totals.set(id, (totals.get(id) || 0) + secs);
+        });
+      });
+      return totals.size ? Math.max(...totals.values()) : 0;
+    }
+
     function computeMetadata(layout) {
-      const durationSeconds = totalDuration || 0;
+      //const durationSeconds = totalDuration || 0;
+      const durationSeconds = computeNodeTotalSeconds(phases) || 0;
+
       const colorsUsed = collectColors(phases);
       
       // Get local time in ISO format without timezone conversion

@@ -316,3 +316,57 @@
       }
 
       }
+
+/* ==============================
+   Presentation-friendly tweaks
+   (Safe overrides; no HTML changes)
+   ============================== */
+
+/* Match the editor's wider feel (without going fully edge-to-edge). */
+.main {
+  max-width: 1400px;
+  margin: 16px auto 28px;
+  padding: 0 28px;
+}
+
+/* Slightly roomier card for demos. */
+.card {
+  padding: 20px 22px 22px;
+  border-radius: 18px;
+}
+
+/* Give the field a little more presence on large screens. */
+@media (min-width: 1024px) {
+  .field {
+    height: 460px;
+  }
+}
+
+/* Reserve space for the fixed bottom controls so content never sits behind it. */
+.controls {
+  padding-bottom: 96px; /* ~fixed bar height + breathing space */
+}
+
+/* Make the fixed player bar look intentional (like a control console). */
+.controls-row {
+  padding: 12px 0;
+  box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.14);
+}
+
+/* Keep toast above the fixed bar. */
+.toast {
+  bottom: 96px;
+}
+
+/* Mobile: stacked controls need a bit more bottom space. */
+@media (max-width: 768px) {
+  .controls {
+    padding-bottom: 148px;
+  }
+  .controls-row {
+    padding: 10px 12px;
+  }
+  .toast {
+    bottom: 148px;
+  }
+}
