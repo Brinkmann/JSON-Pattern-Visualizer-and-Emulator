@@ -481,12 +481,16 @@
       if (!result.ok || !result.config) return;
 
       const layout = layoutSelect?.value || "circle";
-      const base = new URL(VISUAL_PAGE, window.location.href);
-      base.searchParams.set("layout", layout);
-      base.searchParams.set("config", JSON.stringify(result.config));
-      base.searchParams.set("validated", "1");
-      window.location.href = base.toString();
+
+      // ✅ Store configuration in sessionStorage (avoids URL length limits)
+      sessionStorage.setItem("visualConfig", JSON.stringify(result.config));
+      sessionStorage.setItem("visualLayout", layout);
+      sessionStorage.setItem("visualValidated", "1");
+
+      // ✅ Navigate to the visualisation page (clean URL)
+      window.location.href = "./Visualization Page_7.0.html";
     });
+
   </script>
 </body>
 

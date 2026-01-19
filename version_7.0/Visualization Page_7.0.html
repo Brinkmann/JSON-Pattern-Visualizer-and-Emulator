@@ -72,7 +72,7 @@
           </section>
 
           <div class="warning" id="warningBox" style="display:none;">
-            Could not find this mode in localStorage. Showing placeholder field only.
+            No configuration found in this tab/session. Please return to the editor.
           </div>
         </div>
       </article>
@@ -158,6 +158,27 @@
     function getValidatedFromQuery() {
       const params = new URLSearchParams(window.location.search);
       return params.get(VALIDATED_PARAM) === "1";
+    }
+
+
+
+    // ---------- SessionStorage-based loading (recommended) ----------
+    function loadConfigFromSession() {
+      const raw = sessionStorage.getItem("visualConfig");
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function loadLayoutFromSession() {
+      return sessionStorage.getItem("visualLayout") || "circle";
+    }
+
+    function loadValidatedFromSession() {
+      return sessionStorage.getItem("visualValidated") === "1";
     }
 
     function buildSegments() {
@@ -802,31 +823,31 @@
     }
 
     function init() {
-      const configFromQuery = loadConfigFromQuery();
-      const layoutFromQuery = getLayoutFromQuery();
-      validatedFlag = getValidatedFromQuery();
+      const configFromSession = loadConfigFromSession();
+      const layoutFromSession = loadLayoutFromSession();
+      validatedFlag = loadValidatedFromSession();
 
-      if (!configFromQuery) {
-        statusLineEl.textContent = "No config found in URL query.";
+      if (!configFromSession) {
+        statusLineEl.textContent = "No configuration found. Please return to the editor.";
         warningBoxEl.style.display = "block";
       } else {
         currentMode = {
           name: "Drill",
-          layout: layoutFromQuery,
-          config: configFromQuery,
+          layout: layoutFromSession,
+          config: configFromSession,
           validated: validatedFlag
         };
 
         // Prefer pattern_1 structure; fallback to direct phases for robustness
-        const patternKey = Object.keys(configFromQuery).find(key => key.startsWith('pattern_'));
-        if (patternKey && configFromQuery[patternKey] && Array.isArray(configFromQuery[patternKey].phases)) {
-          phases = configFromQuery[patternKey].phases;
-        } else if (configFromQuery.phases) {
-          phases = configFromQuery.phases;
+        const patternKey = Object.keys(configFromSession).find(key => key.startsWith('pattern_'));
+        if (patternKey && configFromSession[patternKey] && Array.isArray(configFromSession[patternKey].phases)) {
+          phases = configFromSession[patternKey].phases;
+        } else if (configFromSession.phases) {
+          phases = configFromSession.phases;
         } else {
           phases = [];
         }
-        
+
         nodeCount = computeNodeCount();
         buildSegments();
         renderField();
@@ -838,6 +859,7 @@
     }
 
     // ---------- Event Listeners ----------
+
     btnPlay.addEventListener("click", startPlayback);
     btnStop.addEventListener("click", stopPlayback);
     btnExport.addEventListener("click", exportConfig);
