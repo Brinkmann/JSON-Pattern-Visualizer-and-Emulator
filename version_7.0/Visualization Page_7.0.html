@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Football EyeQ Drill Visualiser</title>
+  <link rel="stylesheet" href="./css/base.css">
+  <link rel="stylesheet" href="./css/visualizer.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Library for exporting Field preview as PNG -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+</head>
+
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-title">
+          <span>Football EyeQ Drill Visualiser</span>
+          <span class="topbar-badge">Preview</span>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn-secondary" id="btnBack">
+          Back to editor
+        </button>
+        <button class="btn-secondary" id="btnExportImage">
+          Export image
+        </button>
+        <button class="btn-primary" id="btnExport">
+          Copy JSON
+        </button>
+      </div>
+    </header>
+
+    <main class="main">
+      <article class="card">
+        <div class="card-content">
+
+
+          <div class="field-wrapper" id="fieldWrapper">
+            <div class="field" id="field"></div>
+          </div>
+
+          <div class="icon-sidebar" id="iconSidebar"></div>
+
+          <section class="controls">
+            <section class="speed-section">
+              <div>Speed</div>
+              <div class="speed-row">
+                <button class="speed-chip" data-speed="0.25">0.25x</button>
+                <button class="speed-chip" data-speed="0.5">0.5x</button>
+                <button class="speed-chip" data-speed="0.75">0.75x</button>
+                <button class="speed-chip speed-chip--active" data-speed="1">1x</button>
+                <button class="speed-chip" data-speed="1.5">1.5x</button>
+                <button class="speed-chip" data-speed="2">2x</button>
+                <button class="speed-chip" data-speed="3">3x</button>
+                <button class="speed-chip" data-speed="4">4x</button>
+              </div>
+            </section>
+
+            <div class="status-line" id="statusLine">
+              Ready – press Play to preview the drill.
+            </div>
+
+            <div class="controls-row">
+              <button class="btn-ghost btn-ghost--primary" id="btnPlay">Play</button>
+              <button class="btn-ghost" id="btnStop">Stop</button>
+              <button class="btn-ghost btn-ghost--disabled" id="btnResetCones" disabled>Reset Cones</button>
+            </div>
+          </section>
+
+          <div class="warning" id="warningBox" style="display:none;">
+            Could not find this mode in localStorage. Showing placeholder field only.
+          </div>
+        </div>
+      </article>
+    </main>
+  </div>
+
+  <!-- toast element -->
+  <div id="toast" class="toast" aria-hidden="true" role="status"></div>
+
+  <script>
+
+    const COLOR_MAP = {
+      red: "#f97373",
+      blue: "#6366f1",
+      green: "#22c55e",
+      yellow: "#facc15",
+      orange: "#fb923c",
+      black: "#4b5563",
+      grey: "#9ca3af",
+      gray: "#9ca3af",
+      white: "#e5e7eb"
+    };
+
+    const EDITOR_PAGE = "index.html";
+    const CONFIG_PARAM = "config";
+    const LAYOUT_PARAM = "layout";
+    const VALIDATED_PARAM = "validated";
+
+    let currentMode = null;
+    let currentModeId = null;
+
+    let phases = [];
+    let segments = [];
+    let totalDuration = 0;
+    let nodeCount = 0;
+    let playing = false;
+    let speed = 1; // default 1.0x
+    let currentTime = 0;
+    let lastTs = null;
+    let validatedFlag = false;
+
+    const fieldEl = document.getElementById("field");
+    const fieldWrapperEl = document.getElementById("fieldWrapper");
+    const statusLineEl = document.getElementById("statusLine");
+    const warningBoxEl = document.getElementById("warningBox");
+    const iconSidebarEl = document.getElementById("iconSidebar");
+
+    const btnPlay = document.getElementById("btnPlay");
+    const btnStop = document.getElementById("btnStop");
+    const btnExport = document.getElementById("btnExport");
+    const btnBack = document.getElementById("btnBack");
+    const btnExportImage = document.getElementById("btnExportImage");
+    const btnResetCones = document.getElementById("btnResetCones");
+
+    // For dragging
+    let dragging = false;
+    let dragCone = null;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+    let conesModified = false;
+
+    const nodePositions = {};
+    const originalNodePositions = {};
+    let iconCounter = 0; // Track added icons
+
+    // ---------- Helper Functions ----------
+    function loadConfigFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get(CONFIG_PARAM);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw); // params already decoded
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function getLayoutFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get(LAYOUT_PARAM) || "circle";
+    }
+
+    function getValidatedFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get(VALIDATED_PARAM) === "1";
+    }
+
+    function buildSegments() {
+      segments = [];
+      let t = 0;
+      phases.forEach((phase, idx) => {
+        let longest = 0;
+        (phase.nodes || []).forEach((n) => {
+          if (typeof n.secs === "number" && n.secs > longest) {
+            longest = n.secs;
+          }
+        });
+        const start = t;
+        const end = t + longest;
+        segments.push({ start, end, phaseIndex: idx });
+        t = end;
+      });
+      totalDuration = t;
+    }
+
+    function getSegmentAtTime(time) {
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        if (time >= seg.start && time < seg.end) {
+          return seg;
+        }
+      }
+      if (segments.length) return segments[segments.length - 1];
+      return null;
+    }
+
+    function computeNodeCount() {
+      const set = new Set();
+      phases.forEach((p) => {
+        (p.nodes || []).forEach((n) => set.add(n.node));
+      });
+      return set.size || 0;
+    }
+
+    function getPositions(layout, count) {
+      if (!count || count <= 0) return [];
+
+      // For small counts, use corner-based positioning to ensure visible shape differences
+      if (count <= 4) {
+        const corners = {
+          square: [
+            { x: 0.15, y: 0.15 },   // top-left
+            { x: 0.85, y: 0.15 },   // top-right
+            { x: 0.85, y: 0.85 },   // bottom-right
+            { x: 0.15, y: 0.85 }    // bottom-left
+          ],
+          rectangle: [
+            { x: 0.15, y: 0.2 },    // top-left
+            { x: 0.85, y: 0.2 },    // top-right
+            { x: 0.85, y: 0.8 },    // bottom-right
+            { x: 0.15, y: 0.8 }     // bottom-left
+          ],
+          triangle: [
+            { x: 0.5, y: 0.15 },    // top
+            { x: 0.85, y: 0.8 },    // bottom-right
+            { x: 0.15, y: 0.8 },    // bottom-left
+            { x: 0.5, y: 0.5 }      // center (for 4th cone)
+          ]
+        };
+
+        const layoutCorners = corners[layout] || corners.square;
+        return layoutCorners.slice(0, count);
+      }
+
+      // Distribute cones across edges, avoiding duplicate coverage at corners
+      function distribute(count, edges) {
+        const base = Math.floor(count / edges);
+        const remainder = count % edges;
+        return Array.from({ length: edges }, (_, i) => base + (i < remainder ? 1 : 0));
+      }
+
+      // Given start and end points of an edge, return evenly distributed points on that edge
+      function pointsOnEdge(x1, y1, x2, y2, n) {
+        const pts = [];
+        if (n === 1) {
+          pts.push({ x: (x1 + x2) / 2, y: (y1 + y2) / 2 });
+          return pts;
+        }
+        for (let i = 0; i < n; i++) {
+          // Use (i + 1)/(n + 1) to avoid sharing corner points with adjacent edges, preventing overlap
+          const t = (i + 1) / (n + 1);
+          pts.push({ x: x1 + t * (x2 - x1), y: y1 + t * (y2 - y1) });
+        }
+        return pts;
+      }
+
+      if (layout === "square") {
+        // Four edges: top, right, bottom, left
+        const edgeCounts = distribute(count, 4);
+        const minX = 0.15;
+        const maxX = 0.85;
+        const minY = 0.15;
+        const maxY = 0.85;
+
+        return [
+          ...pointsOnEdge(minX, minY, maxX, minY, edgeCounts[0]), // top
+          ...pointsOnEdge(maxX, minY, maxX, maxY, edgeCounts[1]), // right
+          ...pointsOnEdge(maxX, maxY, minX, maxY, edgeCounts[2]), // bottom
+          ...pointsOnEdge(minX, maxY, minX, minY, edgeCounts[3])  // left
+        ];
+      }
+
+      if (layout === "rectangle") {
+        // Four edges: top, right, bottom, left
+        const edgeCounts = distribute(count, 4);
+        const minX = 0.15;
+        const maxX = 0.85;
+        const minY = 0.2;
+        const maxY = 0.8;
+
+        return [
+          ...pointsOnEdge(minX, minY, maxX, minY, edgeCounts[0]), // top
+          ...pointsOnEdge(maxX, minY, maxX, maxY, edgeCounts[1]), // right
+          ...pointsOnEdge(maxX, maxY, minX, maxY, edgeCounts[2]), // bottom
+          ...pointsOnEdge(minX, maxY, minX, minY, edgeCounts[3])  // left
+        ];
+      }
+
+      if (layout === "triangle") {
+        // Three edges: right, bottom, left
+        const edgeCounts = distribute(count, 3);
+        const topX = 0.5;
+        const topY = 0.15;
+        const bottomLeftX = 0.15;
+        const bottomLeftY = 0.8;
+        const bottomRightX = 0.85;
+        const bottomRightY = 0.8;
+
+        return [
+          ...pointsOnEdge(topX, topY, bottomRightX, bottomRightY, edgeCounts[0]),
+          ...pointsOnEdge(bottomRightX, bottomRightY, bottomLeftX, bottomLeftY, edgeCounts[1]),
+          ...pointsOnEdge(bottomLeftX, bottomLeftY, topX, topY, edgeCounts[2])
+        ];
+      }
+
+      // Default / circle layout - arranged in a circle
+      const positions = [];
+      const cx = 0.5;
+      const cy = 0.5;
+      const r = 0.3;
+      const n = count;
+      for (let i = 0; i < n; i++) {
+        const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+        positions.push({
+          x: cx + r * Math.cos(angle),
+          y: cy + r * Math.sin(angle)
+        });
+      }
+      return positions;
+    }
+
+    function colorToCss(name) {
+      if (!name) return COLOR_MAP.gray;
+      const key = String(name).toLowerCase();
+      return COLOR_MAP[key] || COLOR_MAP.gray;
+    }
+
+    function collectColors(phases) {
+      const set = new Set();
+      phases.forEach((p) => {
+        (p.nodes || []).forEach((n) => {
+          const c = n.color;
+          if (!c) return;
+          const lower = String(c).toLowerCase();
+          if (lower === "black") return; // exclude off time
+          set.add(c);
+        });
+      });
+      return Array.from(set);
+    }
+
+    function computeMetadata(layout) {
+      const durationSeconds = totalDuration || 0;
+      const colorsUsed = collectColors(phases);
+      
+      // Get local time in ISO format without timezone conversion
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const timestamp = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+      
+      return {
+        duration_seconds: durationSeconds,
+        nodes_required: nodeCount,
+        phases_count: phases.length,
+        colors_used: colorsUsed,
+        recommended_layout: layout,
+        validated: Boolean(validatedFlag),
+        created_timestamp: timestamp
+      };
+    }
+
+    function updateResetButtonState() {
+      if (!btnResetCones) return;
+      if (conesModified) {
+        btnResetCones.classList.remove("btn-ghost--disabled");
+        btnResetCones.disabled = false;
+      } else {
+        btnResetCones.classList.add("btn-ghost--disabled");
+        btnResetCones.disabled = true;
+      }
+    }
+
+    function resetConePositions() {
+      if (!conesModified) return;
+
+      const cones = fieldEl.querySelectorAll(".cone");
+      cones.forEach((cone) => {
+        const nodeNum = Number(cone.dataset.node);
+        const originalPos = originalNodePositions[nodeNum];
+        if (originalPos) {
+          cone.style.left = originalPos.x * 100 + "%";
+          cone.style.top = originalPos.y * 100 + "%";
+          nodePositions[nodeNum] = JSON.parse(JSON.stringify(originalPos));
+        }
+      });
+
+      conesModified = false;
+      updateResetButtonState();
+      showToast("Cone positions reset.");
+    }
+
+    btnResetCones.addEventListener("click", resetConePositions);
+
+    // ---------- Drag Logic ----------
+    function onConeMouseDown(e) {
+      dragging = true;
+      dragCone = e.currentTarget;
+      const rect = fieldEl.getBoundingClientRect();
+      const coneRect = dragCone.getBoundingClientRect();
+      dragOffsetX = e.clientX - coneRect.left;
+      dragOffsetY = e.clientY - coneRect.top;
+
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+
+    }
+
+    function onMouseMove(e) {
+      if (!dragging || !dragCone) return;
+      const rect = fieldEl.getBoundingClientRect();
+      let x = e.clientX - rect.left - dragOffsetX + 17; // 17 is half width
+      let y = e.clientY - rect.top - dragOffsetY + 17;
+
+      x = Math.max(0, Math.min(rect.width, x));
+      y = Math.max(0, Math.min(rect.height, y));
+
+      const percentX = x / rect.width;
+      const percentY = y / rect.height;
+
+      dragCone.style.left = percentX * 100 + "%";
+      dragCone.style.top = percentY * 100 + "%";
+
+      const nodeIndex = Number(dragCone.dataset.node);
+      nodePositions[nodeIndex] = { x: percentX, y: percentY };
+    }
+
+    function onMouseUp() {
+      if (!dragging || !dragCone) return;
+
+      const nodeNum = Number(dragCone.dataset.node);
+      const fieldRect = fieldEl.getBoundingClientRect();
+      const coneRect = dragCone.getBoundingClientRect();
+
+      // Store updated position as normalized 0-1 values
+      nodePositions[nodeNum] = {
+        x: (coneRect.left - fieldRect.left + 17) / fieldRect.width,
+        y: (coneRect.top - fieldRect.top + 17) / fieldRect.height
+      };
+
+      // Mark as modified and update button state
+      conesModified = true;
+      updateResetButtonState();
+
+      dragging = false;
+      dragCone = null;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+
+      showToast("Cone position updated.");
+    }
+
+    // ---------- Icon Drag Logic ----------
+    /**
+     * Handles mousedown event for icon dragging
+     * Initializes drag state and attaches mousemove/mouseup listeners
+     * @param {MouseEvent} e - The mousedown event
+     */
+    function onIconMouseDown(e) {
+      // Check if the clicked element is an icon-marker
+      if (e.target.classList && e.target.classList.contains("icon-marker")) {
+        // Prevent event from bubbling to parent elements
+        e.stopPropagation();
+        // Prevent default browser behavior (text selection, etc.)
+        e.preventDefault();
+        
+        // Set drag state
+        dragging = true;
+        dragCone = e.target;
+        
+        // Get field and icon positions for coordinate calculations
+        const rect = fieldEl.getBoundingClientRect();
+        const iconRect = dragCone.getBoundingClientRect();
+        
+        // Calculate mouse position relative to icon (not icon top-left)
+        dragOffsetX = e.clientX - iconRect.left;
+        dragOffsetY = e.clientY - iconRect.top;
+
+        // Attach listeners for drag movement and end
+        document.addEventListener("mousemove", onIconMouseMove);
+        document.addEventListener("mouseup", onIconMouseUp);
+      }
+    }
+
+    function onIconMouseMove(e) {
+      if (!dragging || !dragCone) return;
+      const rect = fieldEl.getBoundingClientRect();
+      let x = e.clientX - rect.left - dragOffsetX + 20; // Adjust for icon size
+      let y = e.clientY - rect.top - dragOffsetY + 20;
+
+      x = Math.max(0, Math.min(rect.width, x));
+      y = Math.max(0, Math.min(rect.height, y));
+
+      const percentX = x / rect.width;
+      const percentY = y / rect.height;
+
+      dragCone.style.left = percentX * 100 + "%";
+      dragCone.style.top = percentY * 100 + "%";
+
+      const iconId = dragCone.dataset.iconId;
+      if (iconId) {
+        nodePositions[iconId] = { x: percentX, y: percentY };
+      }
+    }
+
+    function onIconMouseUp() {
+      if (!dragging || !dragCone) return;
+      dragging = false;
+      dragCone = null;
+      document.removeEventListener("mousemove", onIconMouseMove);
+      document.removeEventListener("mouseup", onIconMouseUp);
+      showToast("Icon position updated.");
+    }
+
+    // ---------- Rendering ----------
+    function renderField() {
+      fieldEl.innerHTML = "";
+      if (!nodeCount) return;
+
+      const layout = (currentMode && currentMode.layout) || "circle";
+      const positions = getPositions(layout, nodeCount);
+
+      positions.forEach((pos, idx) => {
+        const cone = document.createElement("div");
+        cone.className = "cone";
+        cone.dataset.node = String(idx + 1);
+        cone.style.left = pos.x * 100 + "%";
+        cone.style.top = pos.y * 100 + "%";
+        cone.style.cursor = "grab";
+
+        // Store position
+        nodePositions[idx + 1] = pos;
+        originalNodePositions[idx + 1] = JSON.parse(JSON.stringify(pos)); // Deep copy
+
+        const label = document.createElement("div");
+        label.className = "cone-label";
+        label.textContent = idx + 1;
+        cone.appendChild(label);
+
+        // Add drag events
+        cone.addEventListener("mousedown", onConeMouseDown);
+
+        fieldEl.appendChild(cone);
+      });
+    }
+
+    function updateConesForPhase(phase) {
+      const nodes = (phase && phase.nodes) || [];
+      const colorMap = new Map();
+      nodes.forEach((n) => {
+        colorMap.set(n.node, n.color);
+      });
+
+      const cones = fieldEl.querySelectorAll(".cone");
+      cones.forEach((cone) => {
+        const nodeIndex = Number(cone.dataset.node);
+        const colorName = colorMap.get(nodeIndex) || "Black";
+        const css = colorToCss(colorName);
+        cone.style.backgroundColor = css;
+        if (colorName && String(colorName).toLowerCase() !== "black") {
+          cone.classList.add("cone--active");
+        } else {
+          cone.classList.remove("cone--active");
+        }
+      });
+    }
+
+    function updateFromTime() {
+      if (!segments.length) return;
+      if (currentTime < 0) currentTime = 0;
+      if (currentTime > totalDuration) currentTime = totalDuration;
+
+      const seg = getSegmentAtTime(currentTime);
+      const phaseIndex = seg ? seg.phaseIndex : 0;
+      const phase = phases[phaseIndex];
+
+      updateConesForPhase(phase);
+    }
+
+    // ---------- Playback Control ----------
+    function tick(timestamp) {
+      if (!playing) return;
+      if (lastTs == null) {
+        lastTs = timestamp;
+        requestAnimationFrame(tick);
+        return;
+      }
+      const delta = (timestamp - lastTs) / 1000;
+      lastTs = timestamp;
+      currentTime += delta * speed;
+
+      if (currentTime >= totalDuration) {
+        // Loop playback - restart from beginning
+        currentTime = 0;
+        statusLineEl.textContent = "Playing… (looping)";
+      } else {
+        statusLineEl.textContent = "Playing…";
+      }
+
+      updateFromTime();
+
+      if (playing) {
+        requestAnimationFrame(tick);
+      }
+    }
+
+    function stopPlayback() {
+      playing = false;
+      lastTs = null;
+      statusLineEl.textContent = "Stopped – press Play to continue.";
+    }
+
+    function startPlayback() {
+      if (!segments.length || !phases.length) return;
+      if (currentTime >= totalDuration) {
+        currentTime = 0;
+      }
+      playing = true;
+      lastTs = null;
+      statusLineEl.textContent = "Playing…";
+      requestAnimationFrame(tick);
+    }
+
+    function setSpeedMultiplier(multiplier) {
+      speed = multiplier;
+      document.querySelectorAll(".speed-chip").forEach((btn) => {
+        const v = Number(btn.dataset.speed || "1");
+        if (v === multiplier) {
+          btn.classList.add("speed-chip--active");
+        } else {
+          btn.classList.remove("speed-chip--active");
+        }
+      });
+      if (!playing) {
+        statusLineEl.textContent = `Ready – speed ${multiplier}x. Press Play to preview the drill.`;
+      }
+    }
+
+    // ---------- Export & Utility Functions ----------
+    let toastTimer = null;
+
+    function showToast(msg, duration = 2500) {
+      const el = document.getElementById("toast");
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.add("toast--visible");
+      el.setAttribute("aria-hidden", "false");
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        el.classList.remove("toast--visible");
+        el.setAttribute("aria-hidden", "true");
+        toastTimer = null;
+      }, duration);
+    }
+
+    function exportConfig() {
+      if (!currentMode || !currentMode.config) return;
+
+      const metadata = computeMetadata(currentMode.layout || getLayoutFromQuery());
+      const dataToCopy = { _metadata: metadata, ...currentMode.config };
+      const dataStr = JSON.stringify(dataToCopy, null, 2);
+
+      function onCopySuccess() {
+        showToast("JSON copied to clipboard (with metadata)");
+      }
+
+      function onCopyFail() {
+        showToast("Could not copy code.");
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(dataStr).then(onCopySuccess, () => {
+          const ta = document.createElement("textarea");
+          ta.value = dataStr;
+          document.body.appendChild(ta);
+          ta.select();
+          try {
+            document.execCommand("copy");
+            onCopySuccess();
+          } catch (e) {
+            alert("Could not copy to clipboard. Here is the JSON:\n\n" + dataStr);
+            onCopyFail();
+          }
+          ta.remove();
+        });
+        return;
+      }
+
+      const ta = document.createElement("textarea");
+      ta.value = dataStr;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        onCopySuccess();
+      } catch (e) {
+        alert("Could not copy to clipboard. Here is the JSON:\n\n" + dataStr);
+        onCopyFail();
+      }
+      ta.remove();
+    }
+
+
+    function exportImage() {
+      if (!window.html2canvas) {
+        alert("html2canvas is not available – cannot export image.");
+        return;
+      }
+      const safeName = "drill";
+
+      html2canvas(fieldWrapperEl, { 
+        backgroundColor: null,
+        allowTaint: true,
+        useCORS: true,
+        logging: false
+      }).then((canvas) => {
+        canvas.toBlob((blob) => {
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = safeName + "_field.png";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        });
+      });
+    }
+
+    function backToEditor() {
+      window.history.back();
+    }
+
+    // ---------- Init ----------
+    function initIconSidebar() {
+      // Initialize with 3 placeholder icons - user will provide URLs
+      const iconUrls = [
+        "https://objectstorage.ap-sydney-1.oraclecloud.com/n/sd2z6nfhfft4/b/football_EyeQ/o/football.png", // Placeholder 1
+        "https://objectstorage.ap-sydney-1.oraclecloud.com/n/sd2z6nfhfft4/b/football_EyeQ/o/goal.png", // Placeholder 2
+        "https://objectstorage.ap-sydney-1.oraclecloud.com/n/sd2z6nfhfft4/b/football_EyeQ/o/player.png"  // Placeholder 3
+      ];
+
+      iconUrls.forEach((url, idx) => {
+        const iconDiv = document.createElement("div");
+        iconDiv.className = "icon-item";
+        iconDiv.dataset.iconIndex = idx;
+        
+        const img = document.createElement("img");
+        img.src = url || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Crect fill='%23e5e7eb' width='60' height='60'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' font-size='12' fill='%239ca3af'%3EIcon " + (idx + 1) + "%3C/text%3E%3C/svg%3E";
+        img.alt = `Icon ${idx + 1}`;
+        
+        iconDiv.appendChild(img);
+        iconDiv.addEventListener("click", () => addIconToField(url || img.src, idx));
+        
+        iconSidebarEl.appendChild(iconDiv);
+      });
+    }
+
+    function addIconToField(iconUrl, iconIndex) {
+      if (!iconUrl) {
+        showToast("Please set icon URL first.");
+        return;
+      }
+
+      iconCounter++;
+      const iconId = "icon_" + iconCounter;
+      const randomX = Math.random();
+      const randomY = Math.random();
+
+      const iconMarker = document.createElement("img");
+      iconMarker.className = "icon-marker";
+      iconMarker.src = iconUrl;
+      iconMarker.dataset.iconId = iconId;
+      iconMarker.style.position = "absolute";
+      iconMarker.style.width = "40px";
+      iconMarker.style.height = "40px";
+      iconMarker.style.left = (randomX * 100) + "%";
+      iconMarker.style.top = (randomY * 100) + "%";
+      iconMarker.style.cursor = "grab";
+      iconMarker.style.borderRadius = "4px";
+      iconMarker.style.transform = "translate(-50%, -50%)";
+      iconMarker.style.boxShadow = "0 2px 8px rgba(0,0,0,0.2)";
+      iconMarker.style.transition = "box-shadow 0.2s ease";
+
+      iconMarker.addEventListener("mousedown", onIconMouseDown);
+      iconMarker.addEventListener("dblclick", () => {
+        // Delete icon on double-click
+        iconMarker.remove();
+        delete nodePositions[iconId];
+        showToast("Icon deleted.");
+      });
+      iconMarker.addEventListener("mouseenter", () => {
+        iconMarker.style.boxShadow = "0 4px 12px rgba(0,0,0,0.3)";
+      });
+      iconMarker.addEventListener("mouseleave", () => {
+        iconMarker.style.boxShadow = "0 2px 8px rgba(0,0,0,0.2)";
+      });
+
+      nodePositions[iconId] = { x: randomX, y: randomY };
+      fieldEl.appendChild(iconMarker);
+      showToast("Icon added to field.");
+    }
+
+    function init() {
+      const configFromQuery = loadConfigFromQuery();
+      const layoutFromQuery = getLayoutFromQuery();
+      validatedFlag = getValidatedFromQuery();
+
+      if (!configFromQuery) {
+        statusLineEl.textContent = "No config found in URL query.";
+        warningBoxEl.style.display = "block";
+      } else {
+        currentMode = {
+          name: "Drill",
+          layout: layoutFromQuery,
+          config: configFromQuery,
+          validated: validatedFlag
+        };
+
+        // Prefer pattern_1 structure; fallback to direct phases for robustness
+        const patternKey = Object.keys(configFromQuery).find(key => key.startsWith('pattern_'));
+        if (patternKey && configFromQuery[patternKey] && Array.isArray(configFromQuery[patternKey].phases)) {
+          phases = configFromQuery[patternKey].phases;
+        } else if (configFromQuery.phases) {
+          phases = configFromQuery.phases;
+        } else {
+          phases = [];
+        }
+        
+        nodeCount = computeNodeCount();
+        buildSegments();
+        renderField();
+        updateFromTime();
+      }
+
+      // Initialize icon sidebar
+      initIconSidebar();
+    }
+
+    // ---------- Event Listeners ----------
+    btnPlay.addEventListener("click", startPlayback);
+    btnStop.addEventListener("click", stopPlayback);
+    btnExport.addEventListener("click", exportConfig);
+    btnExportImage.addEventListener("click", exportImage);
+    btnBack.addEventListener("click", backToEditor);
+
+    document.querySelectorAll(".speed-chip").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const v = Number(btn.dataset.speed || "1");
+        setSpeedMultiplier(v);
+      });
+    });
+
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+
+</html>

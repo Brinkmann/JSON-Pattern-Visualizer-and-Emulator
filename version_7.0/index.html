@@ -1,0 +1,493 @@
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>JSON Cone Editor</title>
+  
+  <link rel="stylesheet" href="./css/base.css">
+  <link rel="stylesheet" href="./css/editor.css">
+
+</head>
+
+<body>
+  <div class="page-root">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-title">
+          <span>Football EyeQ Drill Visualiser</span>
+          <span class="topbar-badge">Editor</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="page-main">
+      <section class="app-main">
+        <header class="app-header">
+          <div class="app-header-left">
+            <div class="app-title">Cones layout & JSON</div>
+            <div class="app-subtitle">
+              Paste or edit your JSON pattern, then preview as an animation.
+            </div>
+          </div>
+          <span class="pill-badge">Editor</span>
+        </header>
+
+        <section class="json-section">
+          <div class="section-title-row">
+            <div class="section-title">JSON input</div>
+          </div>
+
+          <div class="textarea-shell">
+            <textarea id="jsonInput" class="json-textarea" spellcheck="false" placeholder='{
+  "phases": [
+    {
+      "phase": 1,
+      "nodes": [
+        { "node": 1, "color": "Red",   "secs": 3 },
+        { "node": 2, "color": "Blue",  "secs": 3 }
+      ]
+    }
+  ]
+}'></textarea>
+
+            <div class="json-footer-row">
+              <div class="field">
+                <div class="field-label">Cones layout shape</div>
+                <select id="conesLayout" class="field-select">
+                  <option value="circle" selected>Circle layout (default)</option>
+                  <option value="square">Square</option>
+                  <option value="triangle">Triangle</option>
+                  <option value="rectangle">Rectangle</option>
+                </select>
+              </div>
+              <div class="button-row">
+                <button id="btnResetCode" class="btn-sm btn-sm-danger">Reset code</button>
+                <button id="btnValidate" class="btn-sm">Validate</button>
+                <button id="btnVisualize" class="btn-sm btn-sm-primary">Visualization</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div id="validationBox" class="meta-note">
+          Validation: awaiting check.
+        </div>
+
+        <div id="durationTableWrap"></div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    const VISUAL_PAGE = "./Visualization Page_7.0.html";
+    const ALLOWED_COLORS = ["Red", "Blue", "Green", "Yellow", "Black"];
+    const jsonInput = document.getElementById("jsonInput");
+    const layoutSelect = document.getElementById("conesLayout");
+    const btnResetCode = document.getElementById("btnResetCode");
+    const btnValidate = document.getElementById("btnValidate");
+    const btnVisualize = document.getElementById("btnVisualize");
+    const validationBox = document.getElementById("validationBox");
+    const durationTableWrap = document.getElementById("durationTableWrap");
+
+    let lastValidConfig = null;
+    let lastValidPhases = null;
+    let lastValidationTarget = null;
+
+    function setValidationState(result) {
+      if (!validationBox) return;
+      validationBox.classList.remove("meta-note--ok", "meta-note--error");
+      validationBox.innerHTML = "";
+      if (result.ok) {
+        validationBox.classList.add("meta-note--ok");
+        validationBox.textContent = result.message;
+      } else {
+        validationBox.classList.add("meta-note--error");
+        // Split by newline or semicolon, display line by line
+        const lines = result.message.split(/\n|;/).map(p => p.trim()).filter(p => p);
+        lines.forEach((line) => {
+          const div = document.createElement("div");
+          div.textContent = line;
+          validationBox.appendChild(div);
+        });
+      }
+    }
+
+    function resetDurationTable() {
+      if (durationTableWrap) durationTableWrap.innerHTML = "";
+    }
+
+    function computeLineInfo(text, pos) {
+      const prefix = text.slice(0, pos);
+      const lines = prefix.split(/\n/);
+      const line = lines.length;
+      const col = lines[lines.length - 1].length + 1;
+      return { line, col };
+    }
+
+    function formatJsonSyntaxError(raw, error) {
+      const match = /position (\d+)/i.exec(error.message || "");
+      if (!match) return { ok: false, message: `❌ JSON syntax error: ${error.message}` };
+
+      const pos = Number(match[1]);
+      const { line, col } = computeLineInfo(raw, pos);
+      const snippetLines = raw.split(/\n/);
+      const start = Math.max(0, line - 2);
+      const end = Math.min(snippetLines.length - 1, line);
+      const snippet = [];
+      for (let i = start; i <= end; i++) {
+        const prefix = String(i + 1).padStart(3, " ");
+        snippet.push(`${prefix} | ${snippetLines[i]}`);
+      }
+      const pointer = "".padStart(col + 5, " ") + "↑";
+      return {
+        ok: false,
+        message: `❌ JSON syntax error at line ${line}, col ${col}:\n${snippet.join("\n")}\n${pointer}\nFix: Check for missing commas or braces near this line.`
+      };
+    }
+
+    function parseJson(raw) {
+      try {
+        return { ok: true, data: JSON.parse(raw) };
+      } catch (e) {
+        return formatJsonSyntaxError(raw, e);
+      }
+    }
+
+    function extractPattern(parsed) {
+      const patternKey = Object.keys(parsed).find((k) => k.startsWith("pattern_"));
+      if (!patternKey) {
+        return {
+          ok: false,
+          message: `❌ Missing required field: "pattern_1"\nPattern must include:\n{\n  "pattern_1": {\n    "duration": <number>,  ← Missing!\n    "phases": [...]\n  }\n}`
+        };
+      }
+      const pattern = parsed[patternKey];
+      if (!pattern || typeof pattern !== "object") {
+        return { ok: false, message: "❌ pattern_1 must be an object." };
+      }
+      if (typeof pattern.duration !== "number") {
+        return {
+          ok: false,
+          message: '❌ Missing required field: "duration"\nPattern must include:\n{\n  "pattern_1": {\n    "duration": <number>,  ← Missing!\n    "phases": [...]\n  }\n}'
+        };
+      }
+      if (!Array.isArray(pattern.phases) || !pattern.phases.length) {
+        return { ok: false, message: "❌ Missing required field: \"phases\" with at least one phase." };
+      }
+      return { ok: true, phases: pattern.phases, patternKey };
+    }
+
+    function validateNodesShape(phases) {
+      for (let i = 0; i < phases.length; i++) {
+        const phase = phases[i];
+        if (!phase || !Array.isArray(phase.nodes)) {
+          return { ok: false, message: `❌ Phase ${i + 1} is missing "nodes" array.` };
+        }
+        for (let j = 0; j < phase.nodes.length; j++) {
+          const n = phase.nodes[j];
+          if (typeof n.node !== "number") {
+            return { ok: false, message: `❌ Missing required field: "node" in Phase ${i + 1}, node index ${j + 1}.` };
+          }
+          if (typeof n.secs !== "number") {
+            return { ok: false, message: `❌ Missing required field: "secs" for Node ${n.node} in Phase ${i + 1}.` };
+          }
+          if (!n.color || typeof n.color !== "string") {
+            return { ok: false, message: `❌ Missing required field: "color" for Node ${n.node} in Phase ${i + 1}.` };
+          }
+        }
+      }
+      return { ok: true };
+    }
+
+    function collectNodes(phases) {
+      const set = new Set();
+      phases.forEach((p) => {
+        (p.nodes || []).forEach((n) => set.add(n.node));
+      });
+      return Array.from(set).sort((a, b) => a - b);
+    }
+
+    function validateNodeSequence(nodes) {
+      if (!nodes.length) return { ok: false, message: "❌ Validation failed: no nodes found." };
+      if (nodes[0] !== 1) {
+        return {
+          ok: false,
+          message: `✗ Nodes must start at 1\n  Found: ${nodes.join(", ")}\n  Missing: Node 1`
+        };
+      }
+      const missing = [];
+      for (let i = 1; i <= nodes[nodes.length - 1]; i++) {
+        if (!nodes.includes(i)) missing.push(i);
+      }
+      if (missing.length) {
+        return {
+          ok: false,
+          message: `⚠️ Node numbering has gaps: ${nodes.join(", ")}\n   Missing: Node ${missing.join(", ")}\nFix: Renumber nodes to be sequential (1..${nodes[nodes.length - 1]}).`
+        };
+      }
+      return { ok: true };
+    }
+
+    function calculateDurations(phases, nodes) {
+      const perNodeTotals = new Map();
+      const perPhaseDurations = new Map();
+
+      nodes.forEach((node) => {
+        const perPhase = Array(phases.length).fill(0);
+        phases.forEach((phase, idx) => {
+          const match = (phase.nodes || []).find((n) => n.node === node);
+          if (match && typeof match.secs === "number") {
+            perPhase[idx] = match.secs;
+          }
+        });
+        perPhaseDurations.set(node, perPhase);
+        perNodeTotals.set(node, perPhase.reduce((a, b) => a + b, 0));
+      });
+
+      return { perNodeTotals, perPhaseDurations };
+    }
+
+    function modeTotal(entries) {
+      const freq = new Map();
+      entries.forEach(([, total]) => {
+        freq.set(total, (freq.get(total) || 0) + 1);
+      });
+      let best = entries[0][1];
+      let bestCount = 0;
+      freq.forEach((count, total) => {
+        if (count > bestCount) {
+          bestCount = count;
+          best = total;
+        }
+      });
+      return best;
+    }
+
+    function validateNodeTotals(perNodeTotals) {
+      const entries = Array.from(perNodeTotals.entries()).sort((a, b) => a[0] - b[0]);
+      if (!entries.length) {
+        return { ok: false, message: "❌ Validation failed: no nodes found." };
+      }
+
+      const target = modeTotal(entries);
+      const mismatches = entries.filter(([, v]) => v !== target);
+      if (mismatches.length) {
+        const grouped = new Map();
+        entries.forEach(([node, total]) => {
+          const arr = grouped.get(total) || [];
+          arr.push(node);
+          grouped.set(total, arr);
+        });
+
+        const lines = Array.from(grouped.entries())
+          .map(([total, nodes]) => `• Nodes ${nodes.join("-")}: ${total}s total${total === target ? "" : " ← Problem!"}`);
+
+        return {
+          ok: false,
+          target,
+          message: `❌ Duration mismatch detected:\n   ${lines.join("\n   ")}\nFix: Adjust nodes to total ${target}s across all phases. Suggestion: tweak the highlighted nodes by reducing or adding seconds.`
+        };
+      }
+
+      return { ok: true, target };
+    }
+
+    function suggestColor(name) {
+      const lower = name.toLowerCase();
+      let best = null;
+      let bestDist = Infinity;
+      ALLOWED_COLORS.forEach((c) => {
+        const dist = Math.abs(c.length - name.length) + (c[0] === name[0] ? 0 : 1);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = c;
+        }
+      });
+      return best;
+    }
+
+    function validateColors(phases) {
+      const allowed = new Set(ALLOWED_COLORS.map((c) => c.toLowerCase()));
+      const errors = [];
+      
+      for (let i = 0; i < phases.length; i++) {
+        const phase = phases[i];
+        for (let j = 0; j < (phase.nodes || []).length; j++) {
+          const n = phase.nodes[j];
+          const colorName = (n.color || "").toLowerCase();
+          if (!allowed.has(colorName)) {
+            const suggestion = suggestColor(n.color || "");
+            errors.push({
+              color: n.color,
+              node: n.node,
+              phase: i + 1,
+              suggestion
+            });
+          }
+        }
+      }
+      
+      if (errors.length > 0) {
+        const errorLines = errors.map(e => 
+          `  • Node ${e.node} in Phase ${e.phase}: "${e.color}" (did you mean "${e.suggestion}"?)`
+        );
+        return {
+          ok: false,
+          message: `❌ Invalid colour(s) detected:\n${errorLines.join("\n")}\nAllowed colours: ${ALLOWED_COLORS.join(", ")}`
+        };
+      }
+      
+      return { ok: true };
+    }
+
+    function renderDurationTable(phases, perNodeTotals, perPhaseDurations, target) {
+      if (!durationTableWrap) return;
+      durationTableWrap.innerHTML = "";
+      if (!phases || !phases.length) return;
+
+      const table = document.createElement("table");
+      table.className = "validation-table";
+
+      const thead = document.createElement("thead");
+      const headRow = document.createElement("tr");
+
+      ["Node", ...phases.map((_, idx) => `Phase ${idx + 1}`), "Total", "Status"].forEach((label) => {
+        const th = document.createElement("th");
+        th.textContent = label;
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      const entries = Array.from(perNodeTotals.entries()).sort((a, b) => a[0] - b[0]);
+      entries.forEach(([node, total]) => {
+        const row = document.createElement("tr");
+        const nodeCell = document.createElement("td");
+        nodeCell.textContent = node;
+        row.appendChild(nodeCell);
+
+        const perPhase = perPhaseDurations.get(node) || [];
+        perPhase.forEach((secs) => {
+          const td = document.createElement("td");
+          td.textContent = `${secs}s`;
+          row.appendChild(td);
+        });
+
+        const totalCell = document.createElement("td");
+        totalCell.textContent = `${total}s`;
+        row.appendChild(totalCell);
+
+        const statusCell = document.createElement("td");
+        const ok = target != null ? total === target : true;
+        statusCell.textContent = ok ? "✓" : "✗ Mismatch";
+        statusCell.className = ok ? "cell-ok" : "cell-bad";
+        row.appendChild(statusCell);
+
+        tbody.appendChild(row);
+      });
+
+      table.appendChild(tbody);
+
+      const heading = document.createElement("div");
+      heading.className = "table-heading";
+      heading.textContent = "Node Duration Validation:";
+
+      durationTableWrap.appendChild(heading);
+      durationTableWrap.appendChild(table);
+    }
+
+    function buildValidationSuccess(target) {
+      return { ok: true, message: `✓ All nodes have a consistent ${target}s duration` };
+    }
+
+    btnResetCode.addEventListener("click", () => {
+      if (!jsonInput) return;
+      jsonInput.value = "";
+      lastValidConfig = null;
+      lastValidPhases = null;
+      lastValidationTarget = null;
+      resetDurationTable();
+      setValidationState({ ok: true, message: "Validation reset. Paste JSON to start." });
+    });
+
+    function runValidation() {
+      if (!jsonInput) return;
+      const raw = jsonInput.value.trim();
+      if (!raw) {
+        setValidationState({ ok: false, message: "Please paste JSON first." });
+        resetDurationTable();
+        return { ok: false };
+      }
+      const parsedResult = parseJson(raw);
+      if (!parsedResult.ok) {
+        setValidationState(parsedResult);
+        resetDurationTable();
+        return { ok: false };
+      }
+
+      const patternResult = extractPattern(parsedResult.data);
+      if (!patternResult.ok) {
+        setValidationState(patternResult);
+        resetDurationTable();
+        return { ok: false };
+      }
+
+      const shapeResult = validateNodesShape(patternResult.phases);
+      if (!shapeResult.ok) {
+        setValidationState(shapeResult);
+        resetDurationTable();
+        return { ok: false };
+      }
+
+      const nodes = collectNodes(patternResult.phases);
+      const sequenceResult = validateNodeSequence(nodes);
+      if (!sequenceResult.ok) {
+        setValidationState(sequenceResult);
+        resetDurationTable();
+        return { ok: false };
+      }
+
+      const { perNodeTotals, perPhaseDurations } = calculateDurations(patternResult.phases, nodes);
+      const totalsResult = validateNodeTotals(perNodeTotals);
+      renderDurationTable(patternResult.phases, perNodeTotals, perPhaseDurations, totalsResult.target);
+      if (!totalsResult.ok) {
+        setValidationState(totalsResult);
+        return { ok: false };
+      }
+
+      const colorResult = validateColors(patternResult.phases);
+      if (!colorResult.ok) {
+        setValidationState(colorResult);
+        return { ok: false };
+      }
+
+      const success = buildValidationSuccess(totalsResult.target);
+      setValidationState(success);
+      lastValidConfig = parsedResult.data;
+      lastValidPhases = patternResult.phases;
+      lastValidationTarget = totalsResult.target;
+      return { ok: true, config: parsedResult.data };
+    }
+
+    btnValidate.addEventListener("click", () => {
+      runValidation();
+    });
+
+    btnVisualize.addEventListener("click", () => {
+      const result = runValidation();
+      if (!result.ok || !result.config) return;
+
+      const layout = layoutSelect?.value || "circle";
+      const base = new URL(VISUAL_PAGE, window.location.href);
+      base.searchParams.set("layout", layout);
+      base.searchParams.set("config", JSON.stringify(result.config));
+      base.searchParams.set("validated", "1");
+      window.location.href = base.toString();
+    });
+  </script>
+</body>
+
+</html>
