@@ -68,6 +68,7 @@
               <button class="btn-ghost btn-ghost--primary" id="btnPlay">Play</button>
               <button class="btn-ghost" id="btnStop">Stop</button>
               <button class="btn-ghost btn-ghost--disabled" id="btnResetCones" disabled>Reset Cones</button>
+              <button class="btn-ghost" id="btnClearIcons">Clear Icons</button>
             </div>
           </section>
 
@@ -126,6 +127,7 @@
     const btnBack = document.getElementById("btnBack");
     const btnExportImage = document.getElementById("btnExportImage");
     const btnResetCones = document.getElementById("btnResetCones");
+    const btnClearIcons = document.getElementById("btnClearIcons");
 
     // For dragging
     let dragging = false;
@@ -137,6 +139,16 @@
     const nodePositions = {};
     const originalNodePositions = {};
     let iconCounter = 0; // Track added icons
+
+    // Isolated icon drag state (separate from cone drag)
+    let iconDragging = false;
+    let dragIcon = null;
+    let iconDragOffsetX = 0;
+    let iconDragOffsetY = 0;
+    let iconDragPending = false;
+    let iconDragStartX = 0;
+    let iconDragStartY = 0;
+    const ICON_DRAG_THRESHOLD = 4; // pixels before drag starts
 
     // ---------- Helper Functions ----------
     function loadConfigFromQuery() {
@@ -426,6 +438,20 @@
 
     btnResetCones.addEventListener("click", resetConePositions);
 
+    btnClearIcons.addEventListener("click", function() {
+      const markers = fieldEl.querySelectorAll(".icon-marker");
+      if (!markers.length) {
+        showToast("No icons to clear.");
+        return;
+      }
+      markers.forEach(function(m) { m.remove(); });
+      Object.keys(nodePositions).forEach(function(key) {
+        if (key.startsWith("icon_")) delete nodePositions[key];
+      });
+      iconCounter = 0;
+      showToast("All icons cleared.");
+    });
+
     // ---------- Drag Logic ----------
     function onConeMouseDown(e) {
       dragging = true;
@@ -484,43 +510,54 @@
       showToast("Cone position updated.");
     }
 
-    // ---------- Icon Drag Logic ----------
-    /**
-     * Handles mousedown event for icon dragging
-     * Initializes drag state and attaches mousemove/mouseup listeners
-     * @param {MouseEvent} e - The mousedown event
-     */
+    // ---------- Icon Drag Logic (isolated state, threshold-based) ----------
     function onIconMouseDown(e) {
-      // Check if the clicked element is an icon-marker
       if (e.target.classList && e.target.classList.contains("icon-marker")) {
-        // Prevent event from bubbling to parent elements
         e.stopPropagation();
-        // Prevent default browser behavior (text selection, etc.)
-        e.preventDefault();
-        
-        // Set drag state
-        dragging = true;
-        dragCone = e.target;
-        
-        // Get field and icon positions for coordinate calculations
-        const rect = fieldEl.getBoundingClientRect();
-        const iconRect = dragCone.getBoundingClientRect();
-        
-        // Calculate mouse position relative to icon (not icon top-left)
-        dragOffsetX = e.clientX - iconRect.left;
-        dragOffsetY = e.clientY - iconRect.top;
+        // Do NOT call e.preventDefault() here — let dblclick fire normally
 
-        // Attach listeners for drag movement and end
+        iconDragPending = true;
+        iconDragStartX = e.clientX;
+        iconDragStartY = e.clientY;
+        dragIcon = e.target;
+
+        const iconRect = dragIcon.getBoundingClientRect();
+        iconDragOffsetX = e.clientX - iconRect.left;
+        iconDragOffsetY = e.clientY - iconRect.top;
+
+        document.addEventListener("mousemove", onIconMouseMoveThreshold);
+        document.addEventListener("mouseup", onIconMouseUpThreshold);
+      }
+    }
+
+    function onIconMouseMoveThreshold(e) {
+      if (!iconDragPending) return;
+      const dx = e.clientX - iconDragStartX;
+      const dy = e.clientY - iconDragStartY;
+      if (Math.abs(dx) > ICON_DRAG_THRESHOLD || Math.abs(dy) > ICON_DRAG_THRESHOLD) {
+        // Threshold exceeded — start actual drag
+        iconDragPending = false;
+        iconDragging = true;
+        document.removeEventListener("mousemove", onIconMouseMoveThreshold);
+        document.removeEventListener("mouseup", onIconMouseUpThreshold);
         document.addEventListener("mousemove", onIconMouseMove);
         document.addEventListener("mouseup", onIconMouseUp);
       }
     }
 
+    function onIconMouseUpThreshold() {
+      // Mouse released before threshold — this was a click, not a drag
+      iconDragPending = false;
+      dragIcon = null;
+      document.removeEventListener("mousemove", onIconMouseMoveThreshold);
+      document.removeEventListener("mouseup", onIconMouseUpThreshold);
+    }
+
     function onIconMouseMove(e) {
-      if (!dragging || !dragCone) return;
+      if (!iconDragging || !dragIcon) return;
       const rect = fieldEl.getBoundingClientRect();
-      let x = e.clientX - rect.left - dragOffsetX + 20; // Adjust for icon size
-      let y = e.clientY - rect.top - dragOffsetY + 20;
+      let x = e.clientX - rect.left - iconDragOffsetX + 20;
+      let y = e.clientY - rect.top - iconDragOffsetY + 20;
 
       x = Math.max(0, Math.min(rect.width, x));
       y = Math.max(0, Math.min(rect.height, y));
@@ -528,19 +565,19 @@
       const percentX = x / rect.width;
       const percentY = y / rect.height;
 
-      dragCone.style.left = percentX * 100 + "%";
-      dragCone.style.top = percentY * 100 + "%";
+      dragIcon.style.left = percentX * 100 + "%";
+      dragIcon.style.top = percentY * 100 + "%";
 
-      const iconId = dragCone.dataset.iconId;
+      const iconId = dragIcon.dataset.iconId;
       if (iconId) {
         nodePositions[iconId] = { x: percentX, y: percentY };
       }
     }
 
     function onIconMouseUp() {
-      if (!dragging || !dragCone) return;
-      dragging = false;
-      dragCone = null;
+      if (!iconDragging || !dragIcon) return;
+      iconDragging = false;
+      dragIcon = null;
       document.removeEventListener("mousemove", onIconMouseMove);
       document.removeEventListener("mouseup", onIconMouseUp);
       showToast("Icon position updated.");
@@ -783,7 +820,11 @@
         const img = document.createElement("img");
         img.src = url || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Crect fill='%23e5e7eb' width='60' height='60'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' font-size='12' fill='%239ca3af'%3EIcon " + (idx + 1) + "%3C/text%3E%3C/svg%3E";
         img.alt = `Icon ${idx + 1}`;
-        
+        img.onerror = function() {
+          this.onerror = null;
+          this.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Crect fill='%23e5e7eb' width='48' height='48' rx='4'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' font-size='10' fill='%236b7280'%3EIcon " + (idx + 1) + "%3C/text%3E%3C/svg%3E";
+        };
+
         iconDiv.appendChild(img);
         iconDiv.addEventListener("click", () => addIconToField(url || img.src, idx));
         
@@ -805,6 +846,10 @@
       const iconMarker = document.createElement("img");
       iconMarker.className = "icon-marker";
       iconMarker.src = iconUrl;
+      iconMarker.onerror = function() {
+        this.onerror = null;
+        this.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect fill='%23d1d5db' width='40' height='40' rx='4'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' font-size='9' fill='%234b5563'%3EIcon%3C/text%3E%3C/svg%3E";
+      };
       iconMarker.dataset.iconId = iconId;
       iconMarker.style.position = "absolute";
       iconMarker.style.width = "40px";
@@ -816,6 +861,7 @@
       iconMarker.style.transform = "translate(-50%, -50%)";
       iconMarker.style.boxShadow = "0 2px 8px rgba(0,0,0,0.2)";
       iconMarker.style.transition = "box-shadow 0.2s ease";
+      iconMarker.style.zIndex = "20";
 
       iconMarker.addEventListener("mousedown", onIconMouseDown);
       iconMarker.addEventListener("dblclick", () => {
