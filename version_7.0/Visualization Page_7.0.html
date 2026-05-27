@@ -826,13 +826,29 @@
         };
 
         iconDiv.appendChild(img);
-        iconDiv.addEventListener("click", () => addIconToField(url || img.src, idx));
-        
+        iconDiv.draggable = true;
+        iconDiv.addEventListener("dragstart", (ev) => {
+          ev.dataTransfer.setData("text/plain", url);
+          ev.dataTransfer.effectAllowed = "copy";
+        });
+        iconDiv.addEventListener("click", () => addIconToField(url, idx));
+
         iconSidebarEl.appendChild(iconDiv);
+      });
+
+      fieldEl.addEventListener("dragover", (ev) => ev.preventDefault());
+      fieldEl.addEventListener("drop", (ev) => {
+        ev.preventDefault();
+        const src = ev.dataTransfer.getData("text/plain");
+        if (!src) return;
+        const rect = fieldEl.getBoundingClientRect();
+        const x = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+        const y = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
+        addIconToField(src, -1, x, y);
       });
     }
 
-    function addIconToField(iconUrl, iconIndex) {
+    function addIconToField(iconUrl, iconIndex, dropX, dropY) {
       if (!iconUrl) {
         showToast("Please set icon URL first.");
         return;
@@ -840,8 +856,8 @@
 
       iconCounter++;
       const iconId = "icon_" + iconCounter;
-      const randomX = Math.random();
-      const randomY = Math.random();
+      const randomX = (dropX !== undefined) ? dropX : 0.5;
+      const randomY = (dropY !== undefined) ? dropY : 0.5;
 
       const iconMarker = document.createElement("img");
       iconMarker.className = "icon-marker";
