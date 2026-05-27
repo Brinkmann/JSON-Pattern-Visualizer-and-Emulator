@@ -994,7 +994,7 @@
         authAreaEl.innerHTML =
           `<button class="btn-secondary" id="btnSignIn" style="font-size:11px;padding:4px 10px;">Sign in</button>`;
         document.getElementById("btnSignIn").addEventListener("click", () =>
-          auth.signInWithPopup(googleProvider).catch((e) => showToast("Sign-in failed: " + e.message))
+          auth.signInWithRedirect(googleProvider)
         );
       }
     }

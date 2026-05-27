@@ -527,7 +527,7 @@
         editorAuthAreaEl.innerHTML =
           `<button class="btn-sm" id="btnEditorSignIn">Sign in to load saved patterns</button>`;
         document.getElementById("btnEditorSignIn").addEventListener("click", () =>
-          auth.signInWithPopup(googleProvider).catch(() => {})
+          auth.signInWithRedirect(googleProvider)
         );
       }
     }
