@@ -976,6 +976,10 @@
     const saveTitleEl = document.getElementById("saveTitle");
     const saveDescEl = document.getElementById("saveDesc");
 
+    auth.getRedirectResult().catch((err) => {
+      if (err.code && err.code !== "auth/no-auth-event") console.error("Auth redirect error:", err);
+    });
+
     auth.onAuthStateChanged((user) => {
       currentUser = user;
       renderAuthArea();
