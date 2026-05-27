@@ -1030,7 +1030,7 @@
 
       try {
         const metadata = computeMetadata(currentMode.layout || "circle");
-        await db.collection("users").doc(currentUser.uid).collection("patterns").add({
+        const writePromise = db.collection("users").doc(currentUser.uid).collection("patterns").add({
           title,
           description: saveDescEl.value.trim(),
           layout: currentMode.layout || "circle",
@@ -1038,10 +1038,15 @@
           metadata,
           pattern_data: currentMode.config
         });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Timed out — check Firestore is enabled in Firebase Console.")), 10000)
+        );
+        await Promise.race([writePromise, timeoutPromise]);
         saveModalEl.style.display = "none";
         showToast("Pattern saved to library.");
       } catch (err) {
         showToast("Save failed: " + err.message);
+        console.error("Firestore save error:", err);
       } finally {
         confirmBtn.disabled = false;
         confirmBtn.textContent = "Save to library";
