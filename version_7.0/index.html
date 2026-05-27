@@ -507,10 +507,6 @@
     const patternsPanelEl = document.getElementById("patternsPanel");
     const patternsListEl = document.getElementById("patternsList");
 
-    auth.getRedirectResult().catch((err) => {
-      if (err.code && err.code !== "auth/no-auth-event") console.error("Auth redirect error:", err);
-    });
-
     auth.onAuthStateChanged((user) => {
       renderEditorAuth(user);
       if (user) loadPatterns(user);
@@ -531,7 +527,10 @@
         editorAuthAreaEl.innerHTML =
           `<button class="btn-sm" id="btnEditorSignIn">Sign in to load saved patterns</button>`;
         document.getElementById("btnEditorSignIn").addEventListener("click", () =>
-          auth.signInWithRedirect(googleProvider)
+          auth.signInWithPopup(googleProvider).catch((err) => {
+            alert("Sign-in error: " + (err.message || err.code));
+            console.error("Sign-in error", err);
+          })
         );
       }
     }
