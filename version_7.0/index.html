@@ -39,15 +39,25 @@
 
           <div class="textarea-shell">
             <textarea id="jsonInput" class="json-textarea" spellcheck="false" placeholder='{
-  "phases": [
-    {
-      "phase": 1,
-      "nodes": [
-        { "node": 1, "color": "Red",   "secs": 3 },
-        { "node": 2, "color": "Blue",  "secs": 3 }
-      ]
-    }
-  ]
+  "pattern_1": {
+    "duration": 6,
+    "phases": [
+      {
+        "phase": 1,
+        "nodes": [
+          { "node": 1, "color": "Red",  "secs": 3 },
+          { "node": 2, "color": "Blue", "secs": 3 }
+        ]
+      },
+      {
+        "phase": 2,
+        "nodes": [
+          { "node": 1, "color": "Blue", "secs": 3 },
+          { "node": 2, "color": "Red",  "secs": 3 }
+        ]
+      }
+    ]
+  }
 }'></textarea>
 
             <div class="json-footer-row">
@@ -81,7 +91,7 @@
   </div>
 
   <script>
-    const VISUAL_PAGE = "./Visualization Page_7.0.html";
+    const VISUAL_PAGE = "./visualization.html";
     const ALLOWED_COLORS = ["Red", "Blue", "Green", "Yellow", "Black"];
     const jsonInput = document.getElementById("jsonInput");
     const layoutSelect = document.getElementById("conesLayout");
@@ -488,7 +498,7 @@
       sessionStorage.setItem("visualValidated", "1");
 
       // ✅ Navigate to the visualisation page (clean URL)
-      window.location.href = "./Visualization Page_7.0.html";
+      window.location.href = VISUAL_PAGE;
     });
 
   </script>
