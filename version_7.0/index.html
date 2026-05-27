@@ -39,15 +39,25 @@
 
           <div class="textarea-shell">
             <textarea id="jsonInput" class="json-textarea" spellcheck="false" placeholder='{
-  "phases": [
-    {
-      "phase": 1,
-      "nodes": [
-        { "node": 1, "color": "Red",   "secs": 3 },
-        { "node": 2, "color": "Blue",  "secs": 3 }
-      ]
-    }
-  ]
+  "pattern_1": {
+    "duration": 6,
+    "phases": [
+      {
+        "phase": 1,
+        "nodes": [
+          { "node": 1, "color": "Red",  "secs": 3 },
+          { "node": 2, "color": "Blue", "secs": 3 }
+        ]
+      },
+      {
+        "phase": 2,
+        "nodes": [
+          { "node": 1, "color": "Blue", "secs": 3 },
+          { "node": 2, "color": "Red",  "secs": 3 }
+        ]
+      }
+    ]
+  }
 }'></textarea>
 
             <div class="json-footer-row">
