@@ -6,6 +6,11 @@
   
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/editor.css">
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="./firebase-config.js"></script>
 
 </head>
 
@@ -18,6 +23,7 @@
           <span class="topbar-badge">Editor</span>
         </div>
       </div>
+      <div class="topbar-actions" id="editorAuthArea"></div>
     </header>
 
     <main class="page-main">
@@ -84,6 +90,13 @@
         </div>
 
         <div id="durationTableWrap"></div>
+
+        <div id="patternsPanel" class="patterns-panel" style="display:none;">
+          <div class="patterns-panel-heading">
+            <span>My saved patterns</span>
+          </div>
+          <div id="patternsList"></div>
+        </div>
 
       </section>
 
@@ -485,6 +498,102 @@
     btnValidate.addEventListener("click", () => {
       runValidation();
     });
+
+    // ---------- Firebase Auth + Load Patterns ----------
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+    const googleProvider = new firebase.auth.GoogleAuthProvider();
+    const editorAuthAreaEl = document.getElementById("editorAuthArea");
+    const patternsPanelEl = document.getElementById("patternsPanel");
+    const patternsListEl = document.getElementById("patternsList");
+
+    auth.onAuthStateChanged((user) => {
+      renderEditorAuth(user);
+      if (user) loadPatterns(user);
+      else {
+        patternsPanelEl.style.display = "none";
+        patternsListEl.innerHTML = "";
+      }
+    });
+
+    function renderEditorAuth(user) {
+      if (!editorAuthAreaEl) return;
+      if (user) {
+        editorAuthAreaEl.innerHTML =
+          (user.photoURL ? `<img src="${user.photoURL}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:1px solid #e5e7eb;" alt="" />` : "") +
+          `<button class="btn-sm" id="btnEditorSignOut">Sign out</button>`;
+        document.getElementById("btnEditorSignOut").addEventListener("click", () => auth.signOut());
+      } else {
+        editorAuthAreaEl.innerHTML =
+          `<button class="btn-sm" id="btnEditorSignIn">Sign in to load saved patterns</button>`;
+        document.getElementById("btnEditorSignIn").addEventListener("click", () =>
+          auth.signInWithPopup(googleProvider).catch(() => {})
+        );
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function formatDate(ts) {
+      if (!ts || !ts.toDate) return "";
+      return ts.toDate().toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    }
+
+    async function loadPatterns(user) {
+      patternsPanelEl.style.display = "flex";
+      patternsListEl.innerHTML = '<div class="pattern-empty">Loading…</div>';
+      try {
+        const snap = await db.collection("users").doc(user.uid).collection("patterns")
+          .orderBy("created_at", "desc").get();
+
+        patternsListEl.innerHTML = "";
+
+        if (snap.empty) {
+          patternsListEl.innerHTML = '<div class="pattern-empty">No saved patterns yet — save one from the Visualiser page.</div>';
+          return;
+        }
+
+        snap.forEach((doc) => {
+          const p = doc.data();
+          const meta = p.metadata || {};
+          const card = document.createElement("div");
+          card.className = "pattern-card";
+          card.innerHTML = `
+            <div class="pattern-card-body">
+              <div class="pattern-card-title">${escapeHtml(p.title)}</div>
+              <div class="pattern-card-meta">${meta.nodes_required || "?"} nodes · ${meta.phases_count || "?"} phases · ${meta.duration_seconds || "?"}s · ${formatDate(p.created_at)}</div>
+              ${p.description ? `<div class="pattern-card-desc">${escapeHtml(p.description)}</div>` : ""}
+            </div>
+            <div class="pattern-card-actions">
+              <button class="btn-sm btn-sm-primary" data-action="load">Load</button>
+              <button class="btn-sm btn-sm-danger" data-action="delete">Delete</button>
+            </div>`;
+
+          card.querySelector("[data-action='load']").addEventListener("click", () => {
+            if (jsonInput) jsonInput.value = JSON.stringify(p.pattern_data, null, 2);
+            if (layoutSelect && p.layout) layoutSelect.value = p.layout;
+            setValidationState({ ok: true, message: `"${p.title}" loaded — click Validate to continue.` });
+            resetDurationTable();
+            lastValidConfig = null;
+          });
+
+          card.querySelector("[data-action='delete']").addEventListener("click", async () => {
+            if (!confirm(`Delete "${p.title}"?`)) return;
+            await db.collection("users").doc(user.uid).collection("patterns").doc(doc.id).delete();
+            card.remove();
+            if (!patternsListEl.querySelector(".pattern-card")) {
+              patternsListEl.innerHTML = '<div class="pattern-empty">No saved patterns yet — save one from the Visualiser page.</div>';
+            }
+          });
+
+          patternsListEl.appendChild(card);
+        });
+      } catch (err) {
+        patternsListEl.innerHTML = `<div class="pattern-empty" style="color:#b91c1c;">${err.message}</div>`;
+      }
+    }
 
     btnVisualize.addEventListener("click", () => {
       const result = runValidation();

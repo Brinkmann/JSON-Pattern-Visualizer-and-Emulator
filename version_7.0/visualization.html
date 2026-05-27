@@ -10,6 +10,11 @@
 
   <!-- Library for exporting Field preview as PNG -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="./firebase-config.js"></script>
 </head>
 
 <body>
@@ -22,15 +27,11 @@
         </div>
       </div>
       <div class="topbar-actions">
-        <button class="btn-secondary" id="btnBack">
-          Back to editor
-        </button>
-        <button class="btn-secondary" id="btnExportImage">
-          Export image
-        </button>
-        <button class="btn-primary" id="btnExport">
-          Copy JSON
-        </button>
+        <div id="authArea" class="auth-area"></div>
+        <button class="btn-secondary" id="btnBack">Back to editor</button>
+        <button class="btn-secondary" id="btnExportImage">Export image</button>
+        <button class="btn-secondary" id="btnSavePattern" disabled>Save pattern</button>
+        <button class="btn-primary" id="btnExport">Copy JSON</button>
       </div>
     </header>
 
@@ -82,6 +83,21 @@
 
   <!-- toast element -->
   <div id="toast" class="toast" aria-hidden="true" role="status"></div>
+
+  <!-- Save pattern modal -->
+  <div id="saveModal" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-box">
+      <div class="modal-title" id="modalTitle">Save pattern</div>
+      <label class="modal-label" for="saveTitle">Title <span class="modal-required">*</span></label>
+      <input type="text" id="saveTitle" class="modal-input" placeholder="e.g. Sprint relay – 4 cones" maxlength="80" autocomplete="off" />
+      <label class="modal-label" for="saveDesc">Description</label>
+      <textarea id="saveDesc" class="modal-textarea" placeholder="Optional notes about this drill" rows="3" maxlength="300"></textarea>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btnSaveCancel">Cancel</button>
+        <button class="btn-primary" id="btnSaveConfirm">Save to library</button>
+      </div>
+    </div>
+  </div>
 
   <script>
 
@@ -924,6 +940,11 @@
 
       // Initialize icon sidebar
       initIconSidebar();
+
+      // Enable save button now that a pattern is loaded (if already signed in)
+      if (typeof btnSavePattern !== "undefined" && currentUser) {
+        btnSavePattern.disabled = false;
+      }
     }
 
     // ---------- Event Listeners ----------
@@ -942,6 +963,87 @@
     });
 
     document.addEventListener("DOMContentLoaded", init);
+
+    // ---------- Firebase Auth + Save ----------
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+    const googleProvider = new firebase.auth.GoogleAuthProvider();
+    let currentUser = null;
+
+    const authAreaEl = document.getElementById("authArea");
+    const btnSavePattern = document.getElementById("btnSavePattern");
+    const saveModalEl = document.getElementById("saveModal");
+    const saveTitleEl = document.getElementById("saveTitle");
+    const saveDescEl = document.getElementById("saveDesc");
+
+    auth.onAuthStateChanged((user) => {
+      currentUser = user;
+      renderAuthArea();
+      btnSavePattern.disabled = !(user && currentMode);
+    });
+
+    function renderAuthArea() {
+      if (!authAreaEl) return;
+      if (currentUser) {
+        authAreaEl.innerHTML =
+          (currentUser.photoURL ? `<img src="${currentUser.photoURL}" class="auth-avatar" alt="" />` : "") +
+          `<span class="auth-name">${currentUser.displayName || currentUser.email}</span>` +
+          `<button class="btn-secondary" id="btnSignOut" style="font-size:11px;padding:4px 10px;">Sign out</button>`;
+        document.getElementById("btnSignOut").addEventListener("click", () => auth.signOut());
+      } else {
+        authAreaEl.innerHTML =
+          `<button class="btn-secondary" id="btnSignIn" style="font-size:11px;padding:4px 10px;">Sign in</button>`;
+        document.getElementById("btnSignIn").addEventListener("click", () =>
+          auth.signInWithPopup(googleProvider).catch((e) => showToast("Sign-in failed: " + e.message))
+        );
+      }
+    }
+
+    btnSavePattern.addEventListener("click", () => {
+      if (!currentUser) { showToast("Please sign in first."); return; }
+      if (!currentMode) { showToast("No pattern loaded."); return; }
+      saveTitleEl.value = "";
+      saveDescEl.value = "";
+      saveModalEl.style.display = "flex";
+      setTimeout(() => saveTitleEl.focus(), 50);
+    });
+
+    document.getElementById("btnSaveCancel").addEventListener("click", () => {
+      saveModalEl.style.display = "none";
+    });
+
+    saveModalEl.addEventListener("click", (e) => {
+      if (e.target === saveModalEl) saveModalEl.style.display = "none";
+    });
+
+    document.getElementById("btnSaveConfirm").addEventListener("click", async () => {
+      const title = saveTitleEl.value.trim();
+      if (!title) { showToast("Please enter a title."); saveTitleEl.focus(); return; }
+      if (!currentUser || !currentMode) return;
+
+      const confirmBtn = document.getElementById("btnSaveConfirm");
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "Saving…";
+
+      try {
+        const metadata = computeMetadata(currentMode.layout || "circle");
+        await db.collection("users").doc(currentUser.uid).collection("patterns").add({
+          title,
+          description: saveDescEl.value.trim(),
+          layout: currentMode.layout || "circle",
+          created_at: firebase.firestore.FieldValue.serverTimestamp(),
+          metadata,
+          pattern_data: currentMode.config
+        });
+        saveModalEl.style.display = "none";
+        showToast("Pattern saved to library.");
+      } catch (err) {
+        showToast("Save failed: " + err.message);
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "Save to library";
+      }
+    });
   </script>
 </body>
 
